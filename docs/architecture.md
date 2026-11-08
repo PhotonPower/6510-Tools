@@ -1,8 +1,8 @@
 # Architektur
 
 > Die Struktur entspricht den Schwesterprojekten [Z80](https://github.com/PhotonPower/Z80) und
-> [MC68000](https://github.com/PhotonPower/MC68000). **Stand 0.1:** umgesetzt sind `types.hpp`, `version.hpp`,
-> `format.hpp` und `memory.hpp`; alle anderen Komponenten sind geplant (Spalte „Stand“).
+> [MC68000](https://github.com/PhotonPower/MC68000). **Stand 0.2:** umgesetzt sind die Grundbausteine, Opcode-Tabelle,
+> Dekoder, Ausdrucksauswerter, Encoder, Assembler, Disassembler, PETSCII/BASIC und PRG/P00 (Spalte „Stand“).
 
 ## Überblick
 
@@ -45,15 +45,15 @@ Agenten-Schnittstelle sind weitere Frontends derselben Bibliothek.
 | `types.hpp`, `version.hpp`  | `Byte`/`Word`/`Address`, Vektoren, Prozessorport, Flag-Bits, Version                    | fertig   |
 | `format.hpp`                | Zahlenformatierung (`$1F`, `0x1F`, `1FH`)                                               | fertig   |
 | `memory.hpp`                | `Memory`: flacher 64-KiB-Speicher, Little-Endian, `read16Wrapped`                       | fertig   |
-| `opcodes.hpp`               | die Tabelle der 256 Opcodes: Mnemonic, Adressierungsart, Länge, Zyklen, Klasse          | geplant  |
-| `instruction.hpp`           | `Instruction`: Adresse, Bytes, Mnemonic, Operand, `FlowKind`, Ziel                      | geplant  |
-| `decoder.hpp`               | `decode(memory, address, options)` → ein `Instruction`; Symbolizer                      | geplant  |
-| `expression.hpp`            | Ausdrucksauswerter (`<`, `>`, `*`, Symbole, Hex-Standard für den Monitor)               | geplant  |
-| `encoder.hpp`               | `encodeInstruction(request, value)` → Bytes; Operanden-Parser                           | geplant  |
-| `assembler.hpp`             | Zeilenparser, Symboltabelle, Mehrpass (Zero Page / absolut), `AssemblyResult`           | geplant  |
-| `disassembler.hpp`          | Ablaufanalyse, Querverweise, Kommentare, Ausgabe (`render`)                             | geplant  |
-| `petscii.hpp`               | PETSCII ↔ ASCII, Bildschirmcodes, BASIC-Token (Detokenisierer, BASIC-Starter)          | geplant  |
-| `image_io.hpp`              | Dateien lesen/schreiben: Raw, PRG, P00                                                  | geplant  |
+| `opcodes.hpp`               | die Tabelle der 256 Opcodes: Mnemonic, Adressierungsart, Länge, Zyklen, Klasse          | fertig   |
+| `instruction.hpp`           | `Instruction`: Adresse, Bytes, Mnemonic, Operand, `FlowKind`, Ziel                      | fertig   |
+| `decoder.hpp`               | `decode(memory, address, options)` → ein `Instruction`; Symbolizer                      | fertig   |
+| `expression.hpp`            | Ausdrucksauswerter (`<`, `>`, `*`, Symbole, Hex-Standard für den Monitor)               | fertig   |
+| `encoder.hpp`               | `encodeInstruction(request, value)` → Bytes; Operanden-Parser                           | fertig   |
+| `assembler.hpp`             | Zeilenparser, Symboltabelle, Mehrpass (Zero Page / absolut), `AssemblyResult`           | fertig   |
+| `disassembler.hpp`          | Ablaufanalyse, Querverweise, Kommentare, Symboldateien, KERNAL-Namen, Ausgabe (`render`) | fertig   |
+| `petscii.hpp`               | PETSCII ↔ ASCII, Bildschirmcodes, BASIC-Token (Detokenisierer, BASIC-Starter)          | fertig   |
+| `image_io.hpp`              | Dateien lesen/schreiben: Raw, PRG, P00                                                  | fertig   |
 | `d64.hpp`, `t64.hpp`, `crt.hpp` | Disk-, Tape- und Cartridge-Images                                                   | geplant  |
 | `cpu.hpp`                   | `Registers`, `Cpu` (Ausführung, Zyklen, IRQ/NMI, Breakpoints, Hooks, Prozessorport)     | geplant  |
 | `snapshot.hpp`              | `Snapshot` (CPU + Speicher + Maschinenzustand), Datei, Speicher-Diff                    | geplant  |
@@ -82,15 +82,18 @@ natürliche Form. Jeder Eintrag:
 | `mode`        | `AbsoluteX`              | eine der 13 Adressierungsarten ([instruction-set.md](instruction-set.md)) |
 | `length`      | 3                        | folgt aus `mode`                                                     |
 | `cycles`      | 4                        | Grundzyklen                                                          |
-| `pagePenalty` | ja                       | +1 Zyklus bei Seitenüberschreitung (nur lesende indizierte Zugriffe) |
+| `pagePenalty` | ja                       | +1 Zyklus bei Seitenüberschreitung (nur lesende indizierte Zugriffe; bei Verzweigungen: genommen über eine Seite) |
 | `kind`        | `Documented`             | `Documented`, `Illegal` (stabil), `Unstable`, `Jam`                  |
-| `flow`        | `None`                   | `Jump`, `Call`, `Branch`, `Return`, `Interrupt`, `Halt`, `None`      |
+| `preferred`   | ja                       | Vorzugsform für (Mnemonic, Adressierungsart), berechnet: die „offiziellste“ Klasse, dann der kleinste Opcode |
 
-- Der **Dekoder** schlägt nach und filtert nach Optionen (undokumentierte zulassen?).
+Die Ablaufart (`FlowKind`: `Normal`, `Jump`, `CondJump`, `Call`, `Return`, `Halt`) leitet der Dekoder aus Opcode und
+Adressierungsart ab. Die Tabelle steht in `src/opcodes.cpp` als 256 Zeilen, je 16 pro Opcode-Zeile der üblichen Matrix.
+
+- Der **Dekoder** schlägt nach und filtert nach der CPU-Stufe (`CpuLevel`: nur dokumentierte, plus stabile, alle).
 - Der **Encoder** sucht zu Mnemonic und Operandenform den Opcode; weil beide dieselbe Tabelle benutzen, kann es keine Form
   geben, die nur eine Seite kennt. Mehrdeutigkeiten (z. B. mehrere Opcodes für `NOP` oder `SBC #` = `$E9` und `$EB`)
-  werden in der Tabelle durch eine **Vorzugsform** aufgelöst; der Disassembler gibt Nicht-Vorzugsformen so aus, dass der
-  Assembler dieselben Bytes erzeugt (z. B. `.BYTE $EB,$10 ; SBC #$10` im Quelltext-Modus). So bleibt
+  werden in der Tabelle durch eine **Vorzugsform** aufgelöst (`$EB` heißt `USBC`, ist also keine Mehrdeutigkeit); der
+  Disassembler gibt Nicht-Vorzugsformen im Quelltext-Modus als Bytes aus (`.BYTE $1A ; NOP`). So bleibt
   `assemble(disassemble(x)) == x` exakt.
 - Der **Emulator** benutzt die Tabelle für Länge, Zyklen und Klasse; die Ausführung selbst ist ein `switch` über den Opcode
   (oder eine Tabelle von Funktionszeigern), getrennt nach Adressierungs- und Operationsteil.
@@ -112,10 +115,14 @@ automatische Umwandlung in `Bcc`+`JMP`, höchstens als spätere Option).
 ## Disassembler
 
 `Disassembler` hält pro Byte des Bereichs einen Zustand (Daten / Befehlsanfang / Befehlsrest). `analyzeFlow()` folgt Wegen
-von den Einstiegspunkten: ein Weg endet bei `RTS`/`RTI`/`JMP`/JAM/`BRK` (Option), bei ungültigen oder abgeschalteten
-Opcodes, bei Code, der schon analysiert ist (oder überlappen würde), und am Bereichsende. Ziele von `JSR`/`JMP`/
-Verzweigungen werden neue Wege und Labels; `JMP (vektor)` wird verfolgt, wenn der Vektor im analysierten Bereich liegt und
-einen festen Wert hat. Datenzugriffe werden nur Labels.
+von den Einstiegspunkten: ein Weg endet bei `RTS`/`RTI`/`BRK`/`JMP`/`JAM`, bei Opcodes, die auf der gewählten CPU-Stufe
+kein Befehl sind, bei Code, der schon analysiert ist (oder überlappen würde), und am Bereichsende. Ziele von `JSR`/`JMP`/
+Verzweigungen werden neue Wege und Labels; Datenzugriffe (auch der Zeiger von `JMP (vektor)`) werden nur Labels. Das
+Verfolgen von `JMP (vektor)` und Sprungtabellen kommt mit der Analyse in Meilenstein 0.5.
+
+Ein **BASIC-Starter** am Bereichsanfang, der Byte für Byte dem entspricht, was `.BASIC` erzeugt, wird als `.BASIC zeile,ziel`
+ausgegeben; seine `SYS`-Adresse ist der Standard-Einstiegspunkt (bei anderen BASIC-Zeilen wird die `SYS`-Adresse der ersten
+Zeile gesucht). Im Quelltext-Modus werden außerhalb des Bereichs benutzte Namen (KERNAL) als `NAME = $XXXX` vorangestellt.
 
 **6510-Besonderheit – Labels mitten im Befehl:** Selbstmodifizierender Code (`STA loop+1`, `INC ptr+2`) ist auf dem 6502
 üblich. Ein Ziel, das auf das zweite oder dritte Byte eines Befehls zeigt, wird im Quelltext als `label+n` geschrieben

@@ -6,9 +6,15 @@
 
 ## Wo wir stehen
 
-**Version 0.1 – Projektgerüst:** Build, Tests, CI, Dokumentation, `types`/`format`/`memory`, `m6510tool help|version`.
+**Meilenstein 0.2 ist erledigt:** Opcode-Tabelle, Dekoder, Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer,
+`m6510tool asm|dis|basic`; exhaustiver Roundtrip und Kreuzprüfung gegen ca65/da65 ([testing.md](testing.md)). Als Nächstes:
+Meilenstein 0.3 (Emulator, Sitzung, C64).
 
-## Meilenstein 0.2 – Opcode-Tabelle, Dekoder, Assembler, Disassembler
+## Meilenstein 0.2 – Opcode-Tabelle, Dekoder, Assembler, Disassembler (erledigt)
+
+Umgesetzt wie unten beschrieben, mit diesen Abweichungen: Der Assembler wird gegen `ca65` geprüft (nicht `64tass`);
+Intel HEX ist zurückgestellt (niedrige Priorität); `JMP (vektor)` und Sprungtabellen verfolgt erst die Analyse in 0.5;
+I/O-Registernamen im Disassembler kommen mit der C64-Maschine (0.3), weil die Namensfrage noch offen ist.
 
 - **eine** Opcode-Tabelle mit 256 Einträgen (Mnemonic, Adressierungsart, Zyklen, Klasse: dokumentiert / undokumentiert
   stabil / instabil / JAM), gemeinsam benutzt von Dekoder, Encoder und Emulator ([architecture.md](architecture.md))
@@ -19,7 +25,7 @@
   Kommentardatei, `--asm`, Labels mitten im Befehl (`label+1`, selbstmodifizierender Code)
 - Ein-/Ausgabe: Raw, **PRG**, P00, Listing, Symboltabelle, VICE-Labeldatei; BASIC-Detokenisierer (`m6510tool basic list`)
 - Tests: Einzelbefehle, exhaustiver Roundtrip (alle 256 Opcodes × alle Operandenwerte), Robustheit, Kreuzprüfung gegen
-  `da65` (Dekoder) und `64tass`/`ca65` (Assembler) ([testing.md](testing.md))
+  `da65` (Dekoder) und `ca65` (Assembler) ([testing.md](testing.md))
 
 ## Meilenstein 0.3 – Emulator, Sitzung, C64
 
@@ -73,10 +79,9 @@
 - 65C02/65816 – ausdrücklich **kein** Ziel, nur falls es sich später ergibt
 - Zeileneditor mit Verlauf im Monitor, Tab-Vervollständigung, TUI
 
-## Entscheidungen (Vorschlag – bitte bestätigen)
+## Entscheidungen
 
-Bei den Schwesterprojekten wurden diese Punkte direkt nach dem Gerüst entschieden. Die folgenden Vorschläge sind so
-gewählt, dass sie zum Ziel (Reverse Engineering von C64-Programmen mit einem lokalen Modell) passen:
+Bestätigt am 2026-11-08 (Punkte 2, 5, 6 und 8 ausdrücklich, ebenso die offene Frage 1; die übrigen folgen daraus bzw. aus den Schwesterprojekten):
 
 1. **Zielplattform:** Commodore 64, PAL ([c64.md](c64.md)). Der CPU-Kern bleibt maschinenunabhängig (auch für einen
    reinen 6502 nutzbar; der Prozessorport ist abschaltbar).
@@ -101,10 +106,9 @@ gewählt, dass sie zum Ziel (Reverse Engineering von C64-Programmen mit einem lo
 
 ## Offene Fragen
 
-1. **ROMs in der CI:** Für die Schwesterprojekte holte die CI ein ROM mit Erlaubnis des Rechteinhabers (CPC). Für den C64
-   gibt es keine solche Quelle. Optionen: (a) nur KERNAL-Emulation in der CI, (b) ein freier Ersatz wie die
-   MEGA65-OpenROMs (Lizenz und Kompatibilität vorher prüfen), (c) Tests mit echten ROMs nur lokal (`C64_ROMS=…`).
-   Vorschlag: (a) + (c).
+1. **ROMs in der CI** – *entschieden:* die CI läuft mit der KERNAL-Emulation; Tests mit echten ROMs laufen lokal
+   (`C64_ROMS=<verzeichnis>`). Falls nötig, stellt der Projektinhaber eine **private** Quelle mit ROM-Abbildern eines
+   eigenen C64 bereit; sie würde in der CI nur über ein GitHub-Secret angesprochen, nie im Repository oder im Log stehen.
 2. **Registernamen** im I/O-Protokoll und im Disassembler: die Namen aus „Mapping the Commodore 64“ (`EXTCOL`, `BGCOL0`,
    `SCROLY`, …) oder sprechende Namen (`VIC_BORDER`, …)? Vorschlag: „Mapping“-Namen, weil sie in vielen Quellen stehen;
    der Kommentar nennt die Bedeutung.

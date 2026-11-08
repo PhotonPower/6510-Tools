@@ -40,4 +40,22 @@ jobs:
       - name: Build
         run: cmake --build build
       - name: Test
+        env:
+          M6510_ROUNDTRIP_STEP: "15"   # every 15th high byte of two-byte operands (the full run takes minutes under the sanitizers)
         run: ctest --test-dir build --output-on-failure
+
+  crosscheck:
+    name: Cross-check against cc65 (ca65, da65)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cc65
+        run: sudo apt-get update && sudo apt-get install -y cc65
+      - name: Build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM6510_BUILD_TOOLS=ON -DM6510_BUILD_TESTS=OFF && cmake --build build
+      - name: Assembler vs ca65
+        shell: bash
+        run: python3 tools/crosscheck_ca65.py build/m6510tool build/m6510_dump_forms > ca65.log 2>&1 || { cat ca65.log; python3 tools/ci_annotate.py "ca65 cross-check failed" ca65.log; }; cat ca65.log; echo "::notice title=ca65 cross-check::$(head -2 ca65.log | tr '\n' ' ')"
+      - name: Decoder vs da65
+        shell: bash
+        run: python3 tools/crosscheck_da65.py build/m6510_dump_forms > da65.log 2>&1 || { cat da65.log; python3 tools/ci_annotate.py "da65 cross-check failed" da65.log; }; cat da65.log; echo "::notice title=da65 cross-check::$(head -2 da65.log | tr '\n' ' ')"

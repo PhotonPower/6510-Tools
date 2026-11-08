@@ -1,0 +1,35 @@
+# Runs the example through m6510tool: asm -> dis --asm -> asm, compares the files, checks dis and basic list.
+file(MAKE_DIRECTORY ${WORK})
+
+function(run)
+  execute_process(COMMAND ${ARGN} RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "failed (${rc}): ${ARGN}\n${out}\n${err}")
+  endif()
+  set(OUT "${out}" PARENT_SCOPE)
+endfunction()
+
+run(${TOOL} asm ${SRC} -o ${WORK}/hello.prg -s ${WORK}/hello.sym)
+if(NOT OUT MATCHES "33 bytes, \\$0801 - \\$0821, 0 error")
+  message(FATAL_ERROR "unexpected asm summary: ${OUT}")
+endif()
+
+run(${TOOL} dis ${WORK}/hello.prg -c ${COMMENTS})
+foreach(part ".BASIC 10,L_080D" "JSR CHROUT" "BNE L_080F" ".BYTE \"HELLO\",$0D,$00" "; entry: print the message below")
+  string(FIND "${OUT}" "${part}" pos)
+  if(pos EQUAL -1)
+    message(FATAL_ERROR "dis output lacks '${part}':\n${OUT}")
+  endif()
+endforeach()
+
+run(${TOOL} dis ${WORK}/hello.prg --asm --symbols ${WORK}/hello.sym -o ${WORK}/re.asm)
+run(${TOOL} asm ${WORK}/re.asm -o ${WORK}/re.prg)
+execute_process(COMMAND ${CMAKE_COMMAND} -E compare_files ${WORK}/hello.prg ${WORK}/re.prg RESULT_VARIABLE same)
+if(NOT same EQUAL 0)
+  message(FATAL_ERROR "re-assembled program differs from the original")
+endif()
+
+run(${TOOL} basic list ${WORK}/hello.prg)
+if(NOT OUT STREQUAL "10 SYS2061\n")
+  message(FATAL_ERROR "unexpected BASIC listing: '${OUT}'")
+endif()

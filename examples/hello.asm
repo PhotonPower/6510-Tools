@@ -7,8 +7,8 @@
 ; LOAD"HELLO",8 and RUN on a C64: the BASIC line 10 SYS2061 starts the machine code, which
 ; prints the message through the KERNAL routine CHROUT and returns to BASIC.
 ;
-; Status: the assembler is planned for milestone 0.2 (docs/roadmap.md); this file is the
-; reference program for its tests and for the documentation.
+; This file is the reference program of the CLI round-trip test (tests/cli_roundtrip.cmake) and of
+; the documentation.
 
 CHROUT      = $FFD2             ; KERNAL: output the character in A
 

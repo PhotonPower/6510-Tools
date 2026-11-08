@@ -8,6 +8,7 @@ CMakeUserPresets.json
 .vs/
 .vscode/
 .idea/
+.cache/
 *.swp
 *~
 .DS_Store

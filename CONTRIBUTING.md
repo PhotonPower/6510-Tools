@@ -17,7 +17,7 @@ Weitere CMake-Optionen:
 | `M6510_BUILD_TESTS`        | `ON`     | Unit-Tests bauen                                          |
 | `M6510_WARNINGS_AS_ERRORS` | `OFF`    | Compilerwarnungen als Fehler (in der CI auf Linux `ON`)   |
 | `M6510_SANITIZE`           | `OFF`    | AddressSanitizer + UBSan (GCC/Clang)                      |
-| `M6510_BUILD_TOOLS`        | `OFF`    | Entwicklerwerkzeuge für die Kreuzprüfung (noch leer)      |
+| `M6510_BUILD_TOOLS`        | `OFF`    | Entwicklerwerkzeuge für die Kreuzprüfung (`m6510_dump_forms`) |
 
 ## Regeln
 

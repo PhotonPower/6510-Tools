@@ -6,7 +6,7 @@
 
 `m6510::Cpu` (`include/m6510/cpu.hpp`) wird ein **befehlsgenauer** NMOS-6510-Kern: Für jeden Befehl stimmen Register, Flags,
 Speicherinhalt und die **Zahl der Zyklen**; einzelne Buszyklen werden nicht modelliert (Entscheidung in der
-[Roadmap](roadmap.md#entscheidungen-vorschlag--bitte-bestätigen)).
+[Roadmap](roadmap.md#entscheidungen)).
 
 ## Umfang
 

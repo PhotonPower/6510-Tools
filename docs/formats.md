@@ -1,7 +1,7 @@
 # Dateiformate
 
-> **Stand 0.1:** geplant. Ein-/Ausgabe von Raw, PRG und P00 kommt mit Meilenstein 0.2, Snapshots mit 0.3, T64/D64/CRT mit
-> 0.6. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
+> **Stand 0.2:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen) und alle
+> Ausgabeformate des Assemblers sind umgesetzt. Snapshots kommen mit 0.3, T64/D64/CRT mit 0.6, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
 > zu jedem Leser ([testing.md](testing.md)).
 
 ## Kommentardatei (Disassembler, `-c`)
@@ -22,12 +22,13 @@ Nur Bytes, keine Adresse. Beim Laden muss die Adresse angegeben werden (`--org`,
 
 Das Standardformat des C64 (Dateityp `PRG` auf Diskette): **zwei Byte Ladeadresse** (Little-Endian), dann die Daten.
 `$0801` ist die Ladeadresse eines BASIC-Programms. Länge höchstens 65536 − Ladeadresse; längere Dateien werden abgelehnt
-(der C64 würde den Speicher umlaufend überschreiben – Option `--wrap` für Sonderfälle).
+(der C64 würde den Speicher umlaufend überschreiben).
 
 ## P00 (PC64)
 
 `C64File` + NUL (8 Byte), 17 Byte Dateiname (PETSCII, mit NUL aufgefüllt), 1 Byte Satzlänge (REL), dann die PRG-Daten.
-`.P00`/`.S00`/`.U00`/`.R00` stehen für die Dateitypen; gelesen werden P00 (als PRG) und S00/U00 (als Rohdaten).
+`.P00`/`.S00`/`.U00`/`.R00` stehen für die Dateitypen; gelesen wird P00 (als PRG, erkannt an der Signatur, nicht an der
+Endung). S00/U00 als Rohdaten: geplant.
 
 ## BASIC-Programme (tokenisiert)
 
@@ -40,11 +41,12 @@ Ein BASIC-Programm im Speicher ist eine Kette von Zeilen:
 | n | Text mit **Token** `$80–$CB` für Schlüsselwörter (`$9E` = `SYS`, `$99` = `PRINT`, …), `$FF` = π |
 | 1 | `$00` Zeilenende |
 
-`m6510tool basic list prog.prg` detokenisiert (Ausgabe in ASCII, Steuerzeichen als `{CLR}`, `{RED}` …), und der
-Disassembler zeigt einen BASIC-Teil am Programmanfang als Kommentar bzw. – für einen reinen `SYS`-Starter – als
-`.BASIC zeile,ziel`. Die Token-Tabelle ist die des BASIC V2.
+`m6510tool basic list prog.prg` detokenisiert (Ausgabe in ASCII, Steuerzeichen als `{CLR}`, `{RED}` …, andere Zeichen als
+`{$xx}`; in Strings und hinter `REM` werden Bytes nicht als Token gelesen). Der Disassembler zeigt einen `SYS`-Starter, der
+genau dem von `.BASIC` erzeugten entspricht, als `.BASIC zeile,ziel`; andere BASIC-Zeilen bleiben `.BYTE` (die `SYS`-Adresse
+der ersten Zeile wird trotzdem als Einstiegspunkt benutzt). Die Token-Tabelle ist die des BASIC V2.
 
-## Intel HEX (optional)
+## Intel HEX (zurückgestellt)
 
 Wie im Z80-Projekt lesbar und schreibbar, für den Austausch mit EPROM-Brennern und anderen Werkzeugen. Niedrige Priorität.
 

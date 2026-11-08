@@ -41,7 +41,15 @@ endfunction()
 # New components (opcode table, decoder, assembler, cpu, c64, ...) are added to this list as
 # they are written; see docs/architecture.md for the planned layout.
 add_library(m6510core STATIC
-  src/format.cpp)
+  src/assembler.cpp
+  src/decoder.cpp
+  src/disassembler.cpp
+  src/encoder.cpp
+  src/expression.cpp
+  src/format.cpp
+  src/image_io.cpp
+  src/opcodes.cpp
+  src/petscii.cpp)
 target_include_directories(m6510core PUBLIC include)
 target_compile_features(m6510core PUBLIC cxx_std_20)
 m6510_set_warnings(m6510core)
@@ -54,10 +62,11 @@ m6510_set_warnings(m6510tool)
 install(TARGETS m6510tool RUNTIME DESTINATION bin)
 
 # ---- developer tools ------------------------------------------------------------------
-# Reserved for cross-check helpers (dump_forms, Harte/Dormann runners, perfect6502 diff;
-# see docs/testing.md); nothing to build yet.
+# Cross-check helpers (see docs/testing.md); later also the Harte/Dormann runners and the reference diff.
 if(M6510_BUILD_TOOLS)
-  message(STATUS "M6510_BUILD_TOOLS: no developer tools yet")
+  add_executable(m6510_dump_forms tools/dump_forms.cpp)
+  target_link_libraries(m6510_dump_forms PRIVATE m6510core)
+  m6510_set_warnings(m6510_dump_forms)
 endif()
 
 # ---- tests ----------------------------------------------------------------------------
