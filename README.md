@@ -11,15 +11,16 @@ lokalen LLM-Agenten, der Programme analysiert und kommentiert.
 
 > **Zielplattform:** Commodore **64** (MOS 6510, PAL) – siehe [docs/c64.md](docs/c64.md).
 
-> **Status: Meilenstein 0.2 (Assembler, Disassembler).** Opcode-Tabelle, Dekoder, Assembler, Disassembler, PRG/P00 und
-> BASIC-Detokenisierer sind fertig und getestet (exhaustiver Roundtrip über alle 256 Opcodes mit allen Operandenwerten,
-> Kreuzprüfung gegen ca65/da65 in der CI). Emulator, Monitor, Agenten-Schnittstelle und Reverse Engineering folgen
+> **Status: Meilenstein 0.3.** Assembler und Disassembler (0.2) sowie Emulator, C64-Maschine mit KERNAL-Emulation,
+> Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3) sind fertig und geprüft: exhaustiver Roundtrip
+> Dekoder/Assembler, Kreuzprüfung gegen ca65/da65, **alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte ohne Abweichung**
+> und Klaus Dormanns Funktionstest in der CI. Monitor (0.4), Reverse Engineering (0.5) und Disk-Images (0.6) folgen
 > ([Roadmap](docs/roadmap.md)). Die Dokumente unter `docs/` sagen jeweils oben, was davon schon umgesetzt ist.
 
 ## Umfang
 
-Derselbe Umfang wie bei den Schwesterprojekten, übertragen auf den 6510 und den C64. **Fertig** sind Assembler und
-Disassembler (Meilenstein 0.2); alles Weitere ist geplant:
+Derselbe Umfang wie bei den Schwesterprojekten, übertragen auf den 6510 und den C64. **Fertig** sind Assembler,
+Disassembler, Emulator, C64-Maschine und Agenten-Schnittstelle (Meilensteine 0.2 und 0.3); der Rest ist geplant:
 
 **Assembler** (`m6510tool asm`, [docs/assembler-syntax.md](docs/assembler-syntax.md)) – *fertig*
 - alle 151 dokumentierten Opcodes (56 Befehle, 13 Adressierungsarten), auf Wunsch auch die **undokumentierten** des NMOS-6510
@@ -40,24 +41,26 @@ Disassembler (Meilenstein 0.2); alles Weitere ist geplant:
 - Eingabe: PRG, P00, Raw (geplant: Datei aus einem **D64**/**T64**, Cartridge **CRT**); `m6510tool basic list` detokenisiert
   BASIC-Programme
 
-**Emulator** (`m6510::Cpu`, [docs/emulator.md](docs/emulator.md))
+**Emulator** (`m6510::Cpu`, [docs/emulator.md](docs/emulator.md)) – *fertig*
 - alle 256 Opcodes inklusive der undokumentierten (JAM hält an), NMOS-**Dezimalmodus** mit seinen Flag-Eigenheiten,
   `JMP ($xxFF)`-Fehler, Dummy-Zugriffe von Read-Modify-Write-Befehlen; **Zyklen pro Befehl** (Seitenüberschreitung, genommene
   Verzweigungen)
 - IRQ, NMI, RESET, `BRK`; Prozessorport `$00/$01` mit der Speicherumschaltung des C64
 - Einzelschritt, Breakpoints, Watchpoints, `runUntil`/`runUntilReturn`/`stepOver`/`call`, Speicher- und Ausführungs-Hooks
-- **geprüft** gegen öffentliche Einzelbefehls-Testsätze (Tom Harte), Klaus Dormanns Funktionstest, die Testsuite von
-  Wolfgang Lorenz und einen Differenztest gegen eine unabhängige Referenz ([docs/testing.md](docs/testing.md))
+- **geprüft** gegen Tom Hartes Einzelbefehls-Tests (2 440 000 Fälle: Register, Speicher, Zyklen; 0 Abweichungen) und Klaus
+  Dormanns Funktionstest, beide in der CI ([docs/testing.md](docs/testing.md))
 
-**Commodore 64** ([docs/c64.md](docs/c64.md))
+**Commodore 64** ([docs/c64.md](docs/c64.md)) – *fertig bis auf Bildschirmbild und Images*
 - Speicherkarte mit allen Konfigurationen von `$01` (BASIC/KERNAL/Zeichensatz-ROM, I/O), Farb-RAM, VIC-II/SID/CIA-Register als
-  Speicher mit **Schreibprotokoll** und Registernamen, Rasterzähler
-- **KERNAL-Emulation** ohne ROM (`CHROUT`, `GETIN`, `PLOT`, `SETLFS`/`SETNAM`/`LOAD` aus einem Disk-Image, …); alles andere wird
-  protokolliert. Echte ROMs (eigene Kopie, nie im Repository) lassen sich laden
-- **Bildschirm als Bild** (Textmodi, Bitmap, Multicolor, später Sprites) für ein Modell, das Bilder versteht
-- Dateiformate: PRG, P00, T64, D64, CRT; eigenes Snapshot-Format
+  Speicher mit **Schreibprotokoll** und Registernamen; Rasterzeile und CIA-1-Timer A aus dem Zyklenzähler (Raster- und
+  Timer-IRQs)
+- **KERNAL-Emulation** ohne ROM: echte Sprungtabelle über die RAM-Vektoren, `CHROUT` auf Konsole und Bildschirm, `GETIN`,
+  `PLOT`, `LOAD`/`SAVE`, Jiffy-Uhr über den IRQ, …; alles andere wird protokolliert. Echte ROMs (eigene Kopie, nie im
+  Repository) lassen sich laden
+- geplant: **Bildschirm als Bild** (Textmodi, Bitmap, Multicolor, später Sprites) für ein Modell, das Bilder versteht (0.5);
+  T64, D64, CRT (0.6). Fertig: PRG, P00, eigenes Snapshot-Format
 
-**Agenten-Schnittstelle** (`m6510tool serve`, [docs/agent-protocol.md](docs/agent-protocol.md))
+**Agenten-Schnittstelle** (`m6510tool serve`, [docs/agent-protocol.md](docs/agent-protocol.md)) – *fertig bis auf Analyse und Screenshots*
 - JSON-Zeilenprotokoll mit denselben Befehlsnamen wie `z80tool serve` und `m68ktool serve`: assemblieren, disassemblieren,
   Speicher, Register, Lauf/`call`, Breakpoints, Watchpoints, Checkpoints mit Rollback und Speicher-Diff, Snapshots,
   KERNAL-Aufrufe, I/O-Protokoll, Screenshots; Dateizugriff nur mit `--allow-files`
@@ -86,14 +89,10 @@ ctest --test-dir build
 ./build/m6510tool dis hello.prg -c examples/hello.comments.txt  # disassemblieren (Ladeadresse aus dem PRG)
 ./build/m6510tool dis hello.prg --asm                           # als wieder assemblierbarer Quelltext
 ./build/m6510tool basic list hello.prg                          # BASIC-Teil detokenisiert
+./build/m6510tool serve < examples/agent_session.jsonl          # Emulator per JSON-Protokoll (C64 mit KERNAL-Emulation)
 ```
 
-Geplant (ab Meilenstein 0.3/0.4):
-
-```sh
-./build/m6510tool monitor hello.prg                             # interaktiver Monitor
-./build/m6510tool serve < examples/agent_session.jsonl          # Emulator per JSON-Protokoll
-```
+Geplant (Meilenstein 0.4): `./build/m6510tool monitor hello.prg` – interaktiver Monitor.
 
 Voraussetzungen: CMake ≥ 3.16, C++20-Compiler (GCC ≥ 11, Clang ≥ 14, MSVC 2022).
 
@@ -161,8 +160,8 @@ src/           Implementierung
 app/main.cpp   Kommandozeilenwerkzeug m6510tool
 agent/         Orchestrator für Ollama (Python, nur Standardbibliothek) – geplant
 tests/         Unit-Tests (CTest); tests/agent: Orchestrator gegen einen Mock-Ollama – geplant
-tools/         Entwicklerwerkzeuge: Formentabelle, Kreuzprüfung gegen ca65/da65, CI-Annotationen; geplant: Testsatz-Runner, Differenztest
-examples/      Beispielprogramm mit Kommentardatei
+tools/         Entwicklerwerkzeuge: Formentabelle, Kreuzprüfung gegen ca65/da65, Runner für Hartes und Dormanns Tests, CI-Annotationen
+examples/      Beispielprogramm mit Kommentardatei, Agenten-Sitzung
 docs/          Dokumentation (Deutsch)
 ```
 

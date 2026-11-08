@@ -1,5 +1,5 @@
 # Each suite is one executable without an external test framework (see test_util.hpp).
-foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io)
+foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session)
   add_executable(test_${name} test_${name}.cpp)
   target_link_libraries(test_${name} PRIVATE m6510core)
   m6510_set_warnings(test_${name})
@@ -15,3 +15,8 @@ add_test(NAME cli_roundtrip
          COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSRC=${PROJECT_SOURCE_DIR}/examples/hello.asm
                  -DCOMMENTS=${PROJECT_SOURCE_DIR}/examples/hello.comments.txt -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_roundtrip.cmake)
+
+# The example agent session: every reply must be {"ok":true,...}.
+add_test(NAME cli_serve
+         COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSESSION=${PROJECT_SOURCE_DIR}/examples/agent_session.jsonl
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_serve.cmake)

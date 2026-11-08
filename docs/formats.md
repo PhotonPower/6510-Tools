@@ -1,7 +1,7 @@
 # Dateiformate
 
-> **Stand 0.2:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen) und alle
-> Ausgabeformate des Assemblers sind umgesetzt. Snapshots kommen mit 0.3, T64/D64/CRT mit 0.6, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
+> **Stand 0.3:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen), alle
+> Ausgabeformate des Assemblers und Snapshots sind umgesetzt. T64/D64/CRT kommen mit 0.6, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
 > zu jedem Leser ([testing.md](testing.md)).
 
 ## Kommentardatei (Disassembler, `-c`)
@@ -89,10 +89,18 @@ EasyFlash, Action Replay …) sind eine Idee für später; ihre Bänke lassen si
 
 ## Snapshot (`M6510SN1`)
 
-Eigenes Format für `save_state`/`load_state` und den Monitor (`savestate`/`loadstate`): Kennung `M6510SN1`, Maschinentyp,
-CPU-Register und Zähler (Befehle, Zyklen), anstehende Interrupts, Prozessorport, 64 KiB RAM, bei `c64` zusätzlich Farb-RAM,
-Bausteinregister, Rasterzähler und KERNAL-Emulationszustand. Beschädigte Dateien werden abgelehnt (jede Abkürzung wird in den
-Tests geprüft). ROMs werden **nicht** im Snapshot gespeichert, sondern nur ihre Prüfsumme (Warnung bei Abweichung).
+Eigenes Format für `save_state`/`load_state` (später auch Monitor `savestate`/`loadstate`), alle Zahlen Little-Endian:
+
+| Teil | Inhalt |
+|---|---|
+| Kopf | `M6510SN1`, Version (1) |
+| CPU | `A`, `X`, `Y`, `S`, `P`, `PC` (2), Flags (angehalten, IRQ-Leitung, NMI anstehend, I-Verzögerung, Port aktiv), Port-Richtung, Port-Daten, Befehle (8), Zyklen (8), Interrupts (8), Aufruftiefe (4) |
+| RAM | 65 536 Byte |
+| C64 (optional, Kennbyte) | Farb-RAM (1024), VIC (64), SID (32), CIA 1 (16), CIA 2 (16), Konfiguration, `$D019`-Latch, CIA-1-ICR und -Maske, Timer-Latch (2), Timer-Start (8), nächster Unterlauf (8), letzte Rasterprüfung (8), CIA-2-ICR und -Maske, Zufallszustand (4), IRQ von außen |
+| KERNAL-Emulation (optional, Kennbyte) | Zahl der Tasten im Puffer (2), Tasten |
+
+Beschädigte Dateien werden abgelehnt (jede Abkürzung, falsche Kennbytes, Daten am Ende). ROMs werden **nicht** im Snapshot
+gespeichert; ein Snapshot passt nur zur gleichen Maschinenart (`generic` bzw. `c64`).
 
 VICE-Snapshots (`.vsf`) zu **lesen** wäre nützlich (Programme im laufenden Zustand aus dem Emulator holen); eine Idee für
 nach 0.6.

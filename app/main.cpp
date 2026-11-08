@@ -1,6 +1,6 @@
 // m6510tool - command line front end for the MOS 6510 / Commodore 64 tools.
 //
-// Implemented: asm, dis, basic list. Planned (see docs/roadmap.md): monitor, serve, d64, t64, crt.
+// Implemented: asm, dis, basic list, serve. Planned (see docs/roadmap.md): monitor, d64, t64, crt.
 
 #include <cstdio>
 #include <iostream>
@@ -15,6 +15,7 @@
 #include "m6510/format.hpp"
 #include "m6510/image_io.hpp"
 #include "m6510/petscii.hpp"
+#include "m6510/session.hpp"
 #include "m6510/version.hpp"
 
 namespace {
@@ -39,11 +40,11 @@ void printUsage(std::ostream& out) {
         << "                [-c comments.txt] [--asm] [--no-bytes] [--style dollar|c|h] [--illegal none|stable|all]\n"
         << "                [--symbols file] [--no-kernal-names] [-o out]\n"
         << "  m6510tool basic list <file.prg>\n"
+        << "  m6510tool serve [--allow-files]       JSON lines on stdin/stdout (docs/agent-protocol.md)\n"
         << "  m6510tool help | version\n"
         << "\n"
         << "Planned (not implemented yet, see docs/roadmap.md):\n"
         << "  m6510tool monitor [image]\n"
-        << "  m6510tool serve [--allow-files]\n"
         << "  m6510tool d64 | t64 | crt ...\n";
 }
 
@@ -229,8 +230,26 @@ int cmdBasic(Args& args) {
     return kExitOk;
 }
 
+// ---- serve ------------------------------------------------------------------------------------
+int cmdServe(Args& args) {
+    SessionOptions opt;
+    while (!args.done()) {
+        const std::string a = args.next();
+        if (a == "--allow-files") opt.allowFiles = true;
+        else throw UsageError("unknown option '" + a + "'");
+    }
+    Session session(opt);
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.find_first_not_of(" \t") == std::string::npos) continue;
+        std::cout << session.handleLine(line) << std::endl;
+    }
+    return kExitOk;
+}
+
 bool isPlanned(const std::string& command) {
-    for (const char* c : {"monitor", "serve", "d64", "t64", "crt"}) {
+    for (const char* c : {"monitor", "d64", "t64", "crt"}) {
         if (command == c) return true;
     }
     return false;
@@ -258,6 +277,7 @@ int main(int argc, char** argv) {
         if (command == "asm") return cmdAsm(args);
         if (command == "dis") return cmdDis(args);
         if (command == "basic") return cmdBasic(args);
+        if (command == "serve") return cmdServe(args);
         if (isPlanned(command)) {
             std::cerr << "m6510tool: '" << command << "' is not implemented yet (see docs/roadmap.md)\n";
             return kExitUsage;

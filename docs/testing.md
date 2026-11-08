@@ -25,15 +25,15 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 | `image_io` | PRG (Ladeadresse, genau bis `$FFFF`, zu lang, zu kurz), P00 (Name, Signatur), Dateizugriff, Endungen |
 | `cli_version` | `m6510tool version` |
 | `cli_roundtrip` | Beispielprogramm assemblieren → disassemblieren (Ausgabe geprüft) → `--asm` mit Symboldatei → erneut assemblieren → Dateien identisch; `basic list` |
+| `c64` | C64-Maschine (rund 100 Prüfungen): alle acht `$01`-Konfigurationen (Prozessorsicht und `peek`), Schreiben unter ROM, ROM-Größen, Schreibprotokoll (Spiegel, Namen, PC, doppeltes Schreiben von `INC`), Raster-Warteschleife, Raster-IRQ über einen eigenen Vektor, CIA-1-Timer-A-IRQ; KERNAL-Emulation: Programm mit `CHROUT`/`GETIN`/`PLOT`/`SCREEN` (Konsole, Bildschirmspeicher, Farbe, Aufrufprotokoll mit Aufrufstelle), nicht emulierter Aufruf, umgebogener `CHROUT`-Vektor, Jiffy-Uhr über den eigenen IRQ-Handler (60 Hz, nicht protokolliert), `LOAD` über die Dateiquelle, Datei nicht gefunden, `BRK`, unbekannter Einsprung, ausgeblendeter KERNAL, Zustände |
+| `session` | Agenten-Protokoll (rund 5000 Prüfungen): Befehle der generischen Maschine (asm/dis/read/write/set/step/run/break/symbols), über 20 fehlerhafte Anfragen ohne Wirkung, `asm` mit gesammelten Fehlern, `call` (echte Rückkehr, Stapel daneben, Speicher vorgeben), **Checkpoint → Lauf → Rollback → Lauf liefert identische Antworten**, `diff`, Watchpoints, Trace, `step_over`, `run_until_return`; C64: `run_program`, `console`, `io`, `kernalcalls`, `screen`, Rollback stellt Bausteine und Farb-RAM wieder her, `keys`, CPU- und RAM-Sicht, IRQ von außen über die KERNAL-Vektoren; Dateien nur mit `--allow-files` (PRG mit BASIC-Starter, Snapshot speichern/laden, `attach` + `LOAD`, Maschine passt nicht), **jede Abkürzung einer Snapshot-Datei wird abgelehnt**; 3000 zufällige Befehle mit zufälligen Argumenten |
+| `cli_serve` | `examples/agent_session.jsonl` durch `m6510tool serve`: jede Antwort `ok:true`, die Ausgabe des Programms ist da |
+| `cpu` | Emulator (rund 350 Prüfungen): Arithmetik und Flags (auch Dezimalmodus), Seitenfehler (`zp,X`, `(zp),Y` bei `$FF`, `JMP ($xxFF)`), Zyklen (Seitenzuschlag, Verzweigungen), Stapel, `JSR`/`RTS`, `BRK`/`RTI`, IRQ mit Verzögerung nach `CLI`, NMI, `JAM`, Breakpoints/Watchpoints/`runUntil`/`stepOver`/`runUntilReturn`/`call` (falsches „returned“), Hooks (Ausführungs-, Lese-, Schreib-Hook mit dem doppelten Schreiben von `INC`), Prozessorport, Zustand; Abgleich mit dem Dekoder für alle Opcodes |
 
 **Geplant** (Vorbild: die Suites der Schwesterprojekte, jeweils mit dem Meilenstein):
 
 | Suite | Inhalt | MS |
 |---|---|---|
-| `cpu` | Emulator: Arithmetik und Flags (auch Dezimalmodus), alle Adressierungsarten mit Seitenfehlern, Zyklen, Stapel, `BRK`/`RTI`, IRQ/NMI mit Verzögerung nach `CLI`/`SEI`/`PLP`, `JAM`, Prozessorport, Breakpoints/Watchpoints/`runUntil`/`stepOver`/`call`, Hooks; Abgleich mit dem Dekoder für alle 256 Opcodes | 0.3 |
-| `session` | alle Befehle des Agenten-Protokolls; Fehler ohne Absturz; **Checkpoint → Lauf → Rollback → Lauf liefert identische Antworten**; Dateizugriff nur mit `--allow-files`; Snapshot-Serialisierung (jede Abkürzung wird abgelehnt) und Speicher-Diff | 0.3 |
-| `c64` | Speicherkarte: alle acht `$01`-Konfigurationen, Schreiben unter ROM, Spiegelungen, Farb-RAM, Schreibprotokoll mit Namen, Rasterzähler, VIC-Sicht | 0.3 |
-| `kernal` | KERNAL-Emulation: `CHROUT` (Konsole und Bildschirm, Steuerzeichen, Scrollen), `GETIN` mit Tastenpuffer, `PLOT`, `LOAD` aus einem selbst gebauten D64, nicht emulierte Aufrufe werden protokolliert, Rückkehr ins BASIC = `exit`, Checkpoints | 0.3 |
 | `monitor` | Zahlenschreibweisen, alle Befehle, C64-Befehle, Dateibefehle, `--no-files`, **zufällige Befehlszeilen ohne Absturz** | 0.4 |
 | `video` | Rendern aller Modi aus selbst gebauten Speicherzuständen (Pixel an bekannten Stellen), Rahmen, Bank-Umschaltung, Text-Auslesen, PNG-Ausgabe (Kopf, Prüfsummen) | 0.5 |
 | `reverse` | Annotationen, Codefluss-Analyse, verifiziertes Listing; **zufällige Programme mit zufälligen Annotationen: das Listing ist jedes Mal verifiziert** | 0.5 |
@@ -67,15 +67,21 @@ Bewusste Unterschiede zählen die Skripte getrennt: Namen werden umgesetzt (cc65
 nicht kennt, erscheinen als „not supported“ bzw. „.byte in da65“ und lassen die Prüfung nur dann scheitern, wenn es
 dokumentierte Opcodes sind. Die CI schreibt die Zusammenfassung beider Prüfungen als Hinweis in die Zusammenfassung des Laufs.
 
-## Emulator gegen Testsätze und Referenz (geplant)
+## Emulator gegen Testsätze und Referenz
 
-| Prüfung | Quelle | Umfang | Werkzeug |
-|---|---|---|---|
-| Einzelbefehle | Tom Harte, SingleStepTests „6502“ (JSON) | 256 Opcodes × 10 000 Fälle: Register, Speicher, Zyklen und Buszugriffe | `tools/harte_runner.cpp` |
-| Funktionstest | Klaus Dormann, `6502_functional_test` | ganzes Programm, Erfolg = Endlosschleife an bekannter Adresse | `tools/dormann_runner.cpp` |
-| Dezimalmodus | Klaus Dormann, `6502_decimal_test` | alle Operanden-/Flag-Kombinationen für `ADC`/`SBC` | ebenso |
-| C64-Verhalten | Wolfgang Lorenz, Testsuite 2.15 | C64-Programme je Befehl/Thema, auf der C64-Maschine mit KERNAL-Emulation | `tests/agent/test_lorenz.py` o. Ä. |
-| Differenztest | perfect6502 (Kandidat) | zufällige Zustände und Programme, Vergleich nach jedem Befehl | `tools/diff_reference.cpp`, `tools/run_diff_reference.sh` |
+```sh
+cmake -S . -B build -DM6510_BUILD_TOOLS=ON && cmake --build build
+./build/m6510_harte 65x02/6502/v1/*.json                         # Testsatz vorher holen (rund 1 GB)
+./build/m6510_dormann 6502_functional_test.bin 0 0x400 0x3469
+```
+
+| Prüfung | Quelle | Umfang | Werkzeug | Stand |
+|---|---|---|---|---|
+| Einzelbefehle | Tom Harte, SingleStepTests/65x02 „6502“ (JSON, MIT) | 244 Opcodes × 10 000 Fälle (ohne `JAM`): Register, Speicher, Zyklenzahl | `tools/harte_runner.cpp` | CI-Job `singlestep`: 2 440 000 Fälle, 0 Abweichungen |
+| Funktionstest | Klaus Dormann, `6502_functional_test.bin` (GPL-3.0) | ganzes Programm, Erfolg = Endlosschleife bei `$3469` | `tools/dormann_runner.cpp` | CI-Job `functional`: bestanden |
+| Dezimalmodus | Klaus Dormann, `6502_decimal_test` | liegt nur als Quelltext vor; durch die Einzelbefehls-Tests abgedeckt | – | entfällt |
+| C64-Verhalten | Wolfgang Lorenz, Testsuite 2.15 | C64-Programme je Befehl/Thema | – | zurückgestellt (keine stabile Quelle) |
+| Differenztest | perfect6502 (Kandidat) | zufällige Zustände und Programme, Vergleich nach jedem Befehl | – | Idee (durch den vollständigen Einzelbefehls-Testsatz weniger nötig) |
 
 Die Testsätze werden **zur Laufzeit geholt** (CI-Job bzw. Skript) und nicht ins Repository aufgenommen; vor dem Einbau wird
 jeweils die Lizenz geprüft und hier vermerkt. Echte C64-ROMs werden in der CI nicht benutzt
@@ -85,5 +91,4 @@ jeweils die Lizenz geprüft und hier vermerkt. Echte C64-ROMs werden in der CI n
 
 `.github/workflows/ci.yml`: Build und Tests auf Linux (mit `-Werror`), macOS und Windows, dazu ein Lauf mit
 AddressSanitizer/UBSan. Fehlgeschlagene Schritte werden mit `tools/ci_annotate.py` als Annotation sichtbar gemacht.
-Dazu der Job `crosscheck` (ca65/da65, siehe oben). Geplante zusätzliche Jobs: `singlestep` (Harte), `functional`
-(Dormann), `lorenz`, `emulator-diff`, D64 gegen `c1541`.
+Dazu die Jobs `crosscheck` (ca65/da65), `singlestep` (Harte) und `functional` (Dormann). Geplant: D64 gegen `c1541` (0.6).

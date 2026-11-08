@@ -42,14 +42,20 @@ endfunction()
 # they are written; see docs/architecture.md for the planned layout.
 add_library(m6510core STATIC
   src/assembler.cpp
+  src/c64.cpp
+  src/cpu.cpp
   src/decoder.cpp
   src/disassembler.cpp
   src/encoder.cpp
   src/expression.cpp
   src/format.cpp
   src/image_io.cpp
+  src/json.cpp
+  src/kernal.cpp
   src/opcodes.cpp
-  src/petscii.cpp)
+  src/petscii.cpp
+  src/session.cpp
+  src/snapshot.cpp)
 target_include_directories(m6510core PUBLIC include)
 target_compile_features(m6510core PUBLIC cxx_std_20)
 m6510_set_warnings(m6510core)
@@ -67,6 +73,14 @@ if(M6510_BUILD_TOOLS)
   add_executable(m6510_dump_forms tools/dump_forms.cpp)
   target_link_libraries(m6510_dump_forms PRIVATE m6510core)
   m6510_set_warnings(m6510_dump_forms)
+
+  add_executable(m6510_harte tools/harte_runner.cpp)
+  target_link_libraries(m6510_harte PRIVATE m6510core)
+  m6510_set_warnings(m6510_harte)
+
+  add_executable(m6510_dormann tools/dormann_runner.cpp)
+  target_link_libraries(m6510_dormann PRIVATE m6510core)
+  m6510_set_warnings(m6510_dormann)
 endif()
 
 # ---- tests ----------------------------------------------------------------------------

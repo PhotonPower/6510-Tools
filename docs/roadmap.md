@@ -6,9 +6,9 @@
 
 ## Wo wir stehen
 
-**Meilenstein 0.2 ist erledigt:** Opcode-Tabelle, Dekoder, Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer,
-`m6510tool asm|dis|basic`; exhaustiver Roundtrip und Kreuzprüfung gegen ca65/da65 ([testing.md](testing.md)). Als Nächstes:
-Meilenstein 0.3 (Emulator, Sitzung, C64).
+**Meilensteine 0.2 und 0.3 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
+(2,44 Mio. Einzelbefehls-Tests ohne Abweichung, Dormanns Funktionstest), Snapshots, `m6510tool serve`, C64-Maschine und
+KERNAL-Emulation (0.3). Als Nächstes: Meilenstein 0.4 (Monitor).
 
 ## Meilenstein 0.2 – Opcode-Tabelle, Dekoder, Assembler, Disassembler (erledigt)
 
@@ -27,7 +27,13 @@ I/O-Registernamen im Disassembler kommen mit der C64-Maschine (0.3), weil die Na
 - Tests: Einzelbefehle, exhaustiver Roundtrip (alle 256 Opcodes × alle Operandenwerte), Robustheit, Kreuzprüfung gegen
   `da65` (Dekoder) und `ca65` (Assembler) ([testing.md](testing.md))
 
-## Meilenstein 0.3 – Emulator, Sitzung, C64
+## Meilenstein 0.3 – Emulator, Sitzung, C64 (erledigt)
+
+Umgesetzt wie unten beschrieben, mit diesen Abweichungen: Rasterzeile und CIA-1-Timer A laufen aus dem Zyklenzähler
+(statt beim Lesen weiterzurücken), damit Raster- und Timer-IRQs funktionieren. Die Lorenz-Testsuite ist zurückgestellt (keine
+stabile Quelle, siehe [emulator.md](emulator.md#wie-der-kern-geprüft-ist)); ein Differenztest gegen eine weitere Referenz
+ist wegen des vollständigen Einzelbefehls-Testsatzes nicht mehr nötig und bleibt eine Idee. `screen` (Bildschirm als Text)
+ist schon da, das Bild folgt mit 0.5.
 
 - `Cpu`: alle 256 Opcodes, NMOS-Dezimalmodus, Zyklen pro Befehl, IRQ/NMI/RESET/`BRK`, Prozessorport `$00/$01`;
   Einzelschritt, Breakpoints, Watchpoints, `runUntil`/`runUntilReturn`/`stepOver`/`call`, Hooks ([emulator.md](emulator.md))
@@ -109,11 +115,10 @@ Bestätigt am 2026-11-08 (Punkte 2, 5, 6 und 8 ausdrücklich, ebenso die offene 
 1. **ROMs in der CI** – *entschieden:* die CI läuft mit der KERNAL-Emulation; Tests mit echten ROMs laufen lokal
    (`C64_ROMS=<verzeichnis>`). Falls nötig, stellt der Projektinhaber eine **private** Quelle mit ROM-Abbildern eines
    eigenen C64 bereit; sie würde in der CI nur über ein GitHub-Secret angesprochen, nie im Repository oder im Log stehen.
-2. **Registernamen** im I/O-Protokoll und im Disassembler: die Namen aus „Mapping the Commodore 64“ (`EXTCOL`, `BGCOL0`,
-   `SCROLY`, …) oder sprechende Namen (`VIC_BORDER`, …)? Vorschlag: „Mapping“-Namen, weil sie in vielen Quellen stehen;
-   der Kommentar nennt die Bedeutung.
+2. **Registernamen** im I/O-Protokoll und im Disassembler – *umgesetzt wie vorgeschlagen:* die Namen aus „Mapping the
+   Commodore 64“ (`EXTCOL`, `BGCOL0`, `SCROLY`, …). Lässt sich ändern, solange noch keine Projektdateien davon abhängen.
 3. **Palette** für Screenshots: Pepto oder Colodore? Vorschlag: Colodore (neuere Messung), per Option umschaltbar.
-4. **Verhalten der instabilen Opcodes:** welche „magische Konstante“ für `ANE`/`LXA` (häufig `$EE` bzw. `$EE`/`$FF`)?
-   Vorschlag: so, wie es der gewählte Einzelbefehls-Testsatz erwartet, und in [emulator.md](emulator.md) dokumentiert.
-5. **Schreibzugriffe auf `$00/$01`:** Was landet im RAM unter dem Prozessorport (auf echter Hardware ein Wert vom Bus)?
-   Vorschlag: der geschriebene Wert landet auch im RAM; als bekannte Vereinfachung dokumentiert.
+4. **Verhalten der instabilen Opcodes** – *entschieden:* `$EE` für `ANE` und `LXA`, wie in Tom Hartes Testsatz (aus den
+   Testdaten ermittelt); die übrigen instabilen Opcodes ebenfalls nach dem Testsatz ([emulator.md](emulator.md)).
+5. **Schreibzugriffe auf `$00/$01`** – *umgesetzt wie vorgeschlagen:* der geschriebene Wert landet auch im RAM
+   (dokumentierte Vereinfachung).
