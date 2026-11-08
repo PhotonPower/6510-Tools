@@ -112,6 +112,8 @@ std::string Kernal::entryName(Address a) {
     for (const Vectored& v : kVectored)
         if (v.routine == a) return v.name;
     if (a == 0xFE66) return "BRK/warm start";
+    if (a == 0xE544) return "CLRSCR";   // clear the screen (called directly by many programs)
+    if (a == 0xE566) return "HOME";     // cursor home
     if (a == 0xFCE2) return "RESET";
     if (a == kExitTrap) return "return to BASIC";
     return "";
@@ -154,6 +156,8 @@ void Kernal::install() {
         else put(v.entry, {0x6C, static_cast<Byte>(v.vector), static_cast<Byte>(v.vector >> 8)});
     }
     put(0xFFFA, {0x43, 0xFE, 0xE2, 0xFC, 0x48, 0xFF});  // NMI, RESET, IRQ
+    // the table RESTOR copies to $0314-$0333: programs read it directly (LDA $FD30,X / STA $0314,X)
+    for (int i = 0; i < 16; ++i) put(static_cast<Address>(0xFD30 + 2 * i), {static_cast<Byte>(kVectors[i]), static_cast<Byte>(kVectors[i] >> 8)});
     c64_.setKernalPresent(true);
     cpu_.hookLow = 0xE000;
     cpu_.hookHigh = 0xFFFF;
@@ -376,6 +380,13 @@ bool Kernal::emulate(const std::string& n, Registers& r, std::string& note) {
             keys_.pop_front();
         }
         setZ(r.a == 0);
+        setC(false);
+    } else if (n == "CLRSCR") {
+        clearScreen();
+        setC(false);
+    } else if (n == "HOME") {
+        ram_.write8(0xD3, 0);
+        ram_.write8(0xD6, 0);
         setC(false);
     } else if (n == "STOP") {
         r.a = 0xFF;

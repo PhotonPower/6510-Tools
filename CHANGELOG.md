@@ -17,6 +17,12 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
     Kaltstartvektor (`CBM80`) bzw. den RESET-Vektor des Moduls.
   - **Selbstentpackende Programme:** `Cpu::trackWrites`/`watchWrittenCode`, Protokollbefehle `track_writes`, `written`,
     `run_until_unpacked` (mit `continue` für mehrstufige Packer, `ignore`), `save_memory` (PRG oder roh, CPU- oder RAM-Sicht).
+  - **Alle vier CIA-Timer** (Timer A/B beider CIAs, einmalig/fortlaufend, B zählt A, IRQ bzw. flankengesteuerter NMI);
+    Snapshot-Format Version 2 (liest Version 1 weiter). **Joysticks und Tastaturmatrix** an den CIA-Ports (`input`).
+    **Codeabdeckung:** `Cpu::trackExecution`, `track_execution`/`executed`, `analyze` mit `use_executed` (Code, den nur die
+    Ausführung zeigt, bekommt eigene Routinen). KERNAL-Emulation: die Vektortabelle bei `$FD30` (Programme kopieren sie
+    direkt), `$E544` (Bildschirm löschen) und `$E566` (Cursor nach Hause) nachgebildet. Gefunden an einem echten Spiel
+    (Impossible Mission: Sprachausgabe über CIA-2-NMI, Vorspann kopiert die Vektoren aus dem ROM).
   - Tests `d64`, `t64`, `crt` (selbst gebaute Images, Hunderte Mutationen), `test_unpack.py` (Packer in Python, Entpacker in
     6510-Assembler: ein-/zweistufig, über ein D64); Kreuzprüfung gegen `c1541` (VICE) als CI-Job.
 - **Meilenstein 0.5, erster Teil – der Bildschirm als Bild:** `renderScreen` (VIC-II aus dem Speicherzustand: Standard-,

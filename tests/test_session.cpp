@@ -458,5 +458,36 @@ int main() {
         CHECK(!ok(call(s, R"({"cmd":"call","addr":"rti_h","frame":"nmi"})")));
     }
 
+    // input, execution tracking, analysis with executed addresses as hints
+    {
+        Session s;
+        CHECK(!ok(call(s, R"({"cmd":"input","joystick2":"fire"})")));  // generic machine
+        call(s, R"({"cmd":"machine","type":"c64"})");
+        Json r = call(s, R"({"cmd":"input","joystick2":"up,fire","keys":["SPACE","a"]})");
+        CHECK_EQ(str(r, "joystick2"), std::string("up,fire"));
+        CHECK_EQ(r.find("keys")->items().size(), std::size_t{2});
+        CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0xDC00","len":1})"), "hex"), std::string("EE"));
+        CHECK(!ok(call(s, R"({"cmd":"input","joystick1":"sideways"})")));
+        CHECK(!ok(call(s, R"({"cmd":"input","keys":["NOKEY"]})")));
+        call(s, R"({"cmd":"input","joystick2":"","keys":[]})");
+        // a jump through a table the analysis cannot see: only the executed addresses find the target
+        call(s, R"({"cmd":"asm","origin":"0xC000","source":"start: LDA #<target\n STA $FB\n LDA #>target\n STA $FC\n LDA $FB\n PHA\n JMP ($00FB)\nfill: .BYTE 0,0,0\ntarget: INC $D020\n RTS","entry":"start"})");
+        CHECK(!ok(call(s, R"({"cmd":"analyze","use_executed":true})")));
+        call(s, R"({"cmd":"track_execution"})");
+        call(s, R"({"cmd":"call","addr":"start"})");
+        r = call(s, R"({"cmd":"executed"})");
+        CHECK(num(r, "instructions") >= 9);
+        r = call(s, R"({"cmd":"analyze"})");
+        const std::int64_t before = num(r, "code_bytes");
+        r = call(s, R"({"cmd":"analyze","use_executed":true})");
+        CHECK(num(r, "code_bytes") > before);
+        CHECK(num(r, "executed_hints") >= 9);
+        r = call(s, R"({"cmd":"routines","order":"address"})");
+        bool targetIsRoutine = false;
+        for (const Json& x : r.find("routines")->items()) targetIsRoutine |= str(x, "addr") == "0xC011";
+        CHECK(targetIsRoutine);
+        CHECK(!call(s, R"({"cmd":"track_execution","on":false})").find("tracking")->asBool());
+    }
+
     return finish("session");
 }

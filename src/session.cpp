@@ -189,6 +189,25 @@ struct Session::Impl {
         if (cmd == "step" || cmd == "step_over" || cmd == "run" || cmd == "run_until_return") return cmdRun(cmd);
         if (cmd == "call") return cmdCall();
         if (cmd == "track_writes" || cmd == "written" || cmd == "run_until_unpacked" || cmd == "save_memory") return cmdUnpack(cmd);
+        if (cmd == "track_execution") {
+            const bool on = flag("on", true);
+            if (!on) s.m_.cpu().trackExecution(false);
+            else if (flag("clear", true) || !s.m_.cpu().trackingExecution()) s.m_.cpu().trackExecution(true);
+            return ok().set("tracking", s.m_.cpu().trackingExecution());
+        }
+        if (cmd == "executed") {
+            const std::vector<Address> ex = s.m_.cpu().executedAddresses();
+            Json ranges = Json::array();
+            // blocks of executed instructions: gaps of up to 3 bytes (an instruction's operand) are bridged
+            for (std::size_t i = 0; i < ex.size();) {
+                std::size_t j = i;
+                while (j + 1 < ex.size() && ex[j + 1] - ex[j] <= 3) ++j;
+                if (ranges.items().size() < 200) ranges.push(Json::object().set("start", hex4(ex[i])).set("last", hex4(ex[j])));
+                i = j + 1;
+            }
+            return ok().set("tracking", s.m_.cpu().trackingExecution()).set("instructions", ex.size()).set("blocks", ranges);
+        }
+        if (cmd == "input") return cmdInput();
         if (cmd == "run_program") return cmdRunProgram();
         if (cmd == "break" || cmd == "unbreak") {
             const Address a = address("addr");
@@ -238,7 +257,7 @@ struct Session::Impl {
     Json help() const {
         Json list = Json::array();
         for (const char* c : {"asm", "dis", "read", "write", "load_file", "load_rom", "attach", "regs", "set", "step",
-                              "step_over", "run", "run_until_return", "call", "track_writes", "written", "run_until_unpacked", "save_memory", "run_program", "break", "unbreak", "breaks",
+                              "step_over", "run", "run_until_return", "call", "track_writes", "written", "run_until_unpacked", "save_memory", "track_execution", "executed", "input", "run_program", "break", "unbreak", "breaks",
                               "clear_breaks", "watch", "unwatch", "checkpoint", "rollback", "drop", "checkpoints", "diff",
                               "state", "set_state", "save_state", "load_state", "interrupt", "io", "kernalcalls", "console",
                               "keys", "screen", "screenshot", "screens", "screen_drop", "screen_diff", "analyze", "routines",
@@ -598,6 +617,54 @@ struct Session::Impl {
         }
         j.set("written_bytes", cpu.writtenBytes()).set("ranges", rangesJson(64, 8));
         return j;
+    }
+
+    Json cmdInput() {
+        needC64("input");
+        C64& c = *s.m_.c64();
+        auto joystickBits = [&](const char* key) -> Byte {
+            const std::string t = text(key);
+            Byte bits = 0;
+            std::string word;
+            for (char ch : t + ",") {
+                if (ch == ',' || ch == ' ' || ch == '+') {
+                    if (word == "up") bits |= 1;
+                    else if (word == "down") bits |= 2;
+                    else if (word == "left") bits |= 4;
+                    else if (word == "right") bits |= 8;
+                    else if (word == "fire") bits |= 16;
+                    else if (!word.empty()) throw SessionError(std::string(key) + ": unknown direction '" + word + "' (up, down, left, right, fire)");
+                    word.clear();
+                } else {
+                    word += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                }
+            }
+            return bits;
+        };
+        if (has("joystick1")) c.setJoystick(1, joystickBits("joystick1"));
+        if (has("joystick2")) c.setJoystick(2, joystickBits("joystick2"));
+        if (const Json* k = arg("keys"); k && !k->isNull()) {
+            if (!k->isArray()) throw SessionError("keys must be a list of key names (\"SPACE\", \"A\", \"F1\", \"RUNSTOP\", ...)");
+            std::vector<std::pair<unsigned, unsigned>> pos;
+            for (const Json& name : k->items()) {
+                unsigned col = 0, row = 0;
+                if (!name.isString() || !C64::keyPosition(name.asString(), col, row))
+                    throw SessionError("unknown key " + name.dump());
+                pos.emplace_back(col, row);
+            }
+            c.releaseAllKeys();
+            for (const auto& [col, row] : pos) c.setKey(col, row, true);
+        }
+        auto joyText = [](Byte b) {
+            std::string t;
+            const char* names[] = {"up", "down", "left", "right", "fire"};
+            for (int i = 0; i < 5; ++i)
+                if ((b >> i) & 1) t += (t.empty() ? "" : ",") + std::string(names[i]);
+            return t;
+        };
+        Json keys = Json::array();
+        for (const std::string& n : c.pressedKeys()) keys.push(n);
+        return ok().set("joystick1", joyText(c.joystick(1))).set("joystick2", joyText(c.joystick(2))).set("keys", keys);
     }
 
     Json cmdRunProgram() {

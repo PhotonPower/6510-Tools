@@ -539,6 +539,7 @@ StepResult Cpu::step() {
         return res;
     }
     if (traceHook) traceHook(r_, r_.pc, fetch(r_.pc));
+    if (trackingExec_) executed_[r_.pc] = 1;
     Exec exec(*this);
     res = exec.run();
     res.cycles += extraCycles_;
@@ -690,6 +691,19 @@ RunResult Cpu::callInterrupt(Address entry, Address returnAddress, bool kernalFr
         else --depth_;
     }
     return res;
+}
+
+void Cpu::trackExecution(bool on) {
+    trackingExec_ = on;
+    if (on) executed_.assign(0x10000, 0);
+    else executed_.clear();
+}
+
+std::vector<Address> Cpu::executedAddresses() const {
+    std::vector<Address> out;
+    for (std::size_t a = 0; a < executed_.size(); ++a)
+        if (executed_[a]) out.push_back(static_cast<Address>(a));
+    return out;
 }
 
 void Cpu::trackWrites(bool on) {

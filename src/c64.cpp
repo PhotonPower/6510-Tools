@@ -1,5 +1,6 @@
 #include "m6510/c64.hpp"
 
+#include <cctype>
 #include <stdexcept>
 
 namespace m6510 {
@@ -94,6 +95,51 @@ bool C64::readMapped(Address a, Byte& v, bool effects) {
     return false;
 }
 
+void C64::setJoystick(unsigned port, Byte pressed) {
+    if (port != 1 && port != 2) throw std::invalid_argument("joystick port must be 1 or 2");
+    (port == 1 ? joy1_ : joy2_) = static_cast<Byte>(pressed & 0x1F);
+}
+
+void C64::setKey(unsigned column, unsigned row, bool pressed) {
+    if (column > 7 || row > 7) throw std::invalid_argument("key matrix position out of range");
+    if (pressed) keys_[column] = static_cast<Byte>(keys_[column] | (1u << row));
+    else keys_[column] = static_cast<Byte>(keys_[column] & ~(1u << row));
+}
+
+namespace {
+// The C64 keyboard matrix: [column][row]
+const char* const kKeyNames[8][8] = {
+    {"DEL", "RETURN", "CRSRRIGHT", "F7", "F1", "F3", "F5", "CRSRDOWN"},
+    {"3", "W", "A", "4", "Z", "S", "E", "LSHIFT"},
+    {"5", "R", "D", "6", "C", "F", "T", "X"},
+    {"7", "Y", "G", "8", "B", "H", "U", "V"},
+    {"9", "I", "J", "0", "M", "K", "O", "N"},
+    {"+", "P", "L", "-", ".", ":", "@", ","},
+    {"POUND", "*", ";", "HOME", "RSHIFT", "=", "UPARROW", "/"},
+    {"1", "LEFTARROW", "CTRL", "2", "SPACE", "CBM", "Q", "RUNSTOP"}};
+}  // namespace
+
+bool C64::keyPosition(const std::string& name, unsigned& column, unsigned& row) {
+    std::string n;
+    for (char c : name) n += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    for (unsigned c = 0; c < 8; ++c)
+        for (unsigned r = 0; r < 8; ++r)
+            if (n == kKeyNames[c][r]) {
+                column = c;
+                row = r;
+                return true;
+            }
+    return false;
+}
+
+std::vector<std::string> C64::pressedKeys() const {
+    std::vector<std::string> out;
+    for (unsigned c = 0; c < 8; ++c)
+        for (unsigned r = 0; r < 8; ++r)
+            if ((keys_[c] >> r) & 1) out.emplace_back(kKeyNames[c][r]);
+    return out;
+}
+
 void C64::insertCartridge(std::vector<Byte> roml, std::vector<Byte> romh, bool exrom, bool game) {
     if (roml.size() > 0x2000 || romh.size() > 0x2000) throw std::invalid_argument("a cartridge ROM is at most 8 KiB");
     roml_ = std::move(roml);
@@ -155,11 +201,65 @@ Address C64::screenAddress() const {
     return static_cast<Address>(vicBank() + ((vic_[0x18] >> 4) & 0x0F) * 0x400);
 }
 
-unsigned C64::timerA() const {
-    const unsigned latch = s_.cia1Latch;
-    if (!(s_.cia1[0x0E] & 1)) return static_cast<unsigned>(s_.cia1[4] | (s_.cia1[5] << 8));
-    const std::uint64_t elapsed = cpu_.cycleCount() - s_.cia1Start;
-    return static_cast<unsigned>(latch - (elapsed % (std::uint64_t{latch} + 1)));
+unsigned C64::timerValue(unsigned index) const {
+    const State::Timer& t = s_.timers[index];
+    if (!(control(index) & 1) || !countsCycles(index)) return t.counter;
+    const std::uint64_t elapsed = cpu_.cycleCount() - t.start;
+    if (elapsed <= t.counter) return static_cast<unsigned>(t.counter - elapsed);
+    const std::uint64_t rem = (elapsed - t.counter - 1) % (std::uint64_t{t.latch} + 1);
+    return static_cast<unsigned>(t.latch - rem);
+}
+
+void C64::timerUnderflows(unsigned index, std::uint64_t n) {
+    if (n == 0) return;
+    Byte& icr = index < 2 ? s_.cia1Icr : s_.cia2Icr;
+    icr = static_cast<Byte>(icr | ((index & 1) ? 0x02 : 0x01));
+    if (control(index) & 0x08) control(index) = static_cast<Byte>(control(index) & ~1);  // one-shot: stops
+    // timer B can count the underflows of timer A
+    if (!(index & 1)) {
+        const unsigned b = index + 1;
+        if ((control(b) & 1) && (control(b) & 0x40)) {
+            State::Timer& tb = s_.timers[b];
+            std::uint64_t left = n;
+            while (left > 0 && (control(b) & 1)) {
+                if (left <= tb.counter) {
+                    tb.counter = static_cast<std::uint16_t>(tb.counter - left);
+                    left = 0;
+                } else {
+                    left -= std::uint64_t{tb.counter} + 1;
+                    tb.counter = tb.latch;
+                    timerUnderflows(b, 1);
+                }
+            }
+        }
+    }
+}
+
+void C64::writeTimer(unsigned cia, unsigned r, Byte v) {
+    std::array<Byte, 0x10>& regs = cia == 0 ? s_.cia1 : s_.cia2;
+    const unsigned index = cia * 2 + (r >= 6 && r <= 7 ? 1 : r == 0x0F ? 1 : 0);
+    State::Timer& t = s_.timers[index];
+    if (r >= 4 && r <= 7) {
+        regs[r] = v;
+        const unsigned lo = (index & 1) ? 6 : 4;
+        t.latch = static_cast<std::uint16_t>(regs[lo] | (regs[lo + 1] << 8));
+        if ((r & 1) && !(control(index) & 1)) t.counter = t.latch;  // the high byte loads a stopped timer
+        return;
+    }
+    // control register
+    const bool wasRunning = (regs[r] & 1) != 0;
+    if (wasRunning) t.counter = static_cast<std::uint16_t>(timerValue(index));  // freeze the current value
+    regs[r] = static_cast<Byte>(v & ~0x10);
+    if (v & 0x10) t.counter = t.latch;  // force load
+    const std::uint64_t now = cpu_.cycleCount();
+    t.start = now;
+    t.next = now + t.counter + 1;
+}
+
+void C64::updateNmi() {
+    const bool line = (s_.cia2Icr & s_.cia2Mask & 0x1F) != 0;
+    if (line && !s_.nmiLine) cpu_.nmi();  // the NMI input reacts to the falling edge of the CIA's output
+    s_.nmiLine = line;
 }
 
 Byte C64::peek(Address a) const {
@@ -213,10 +313,20 @@ bool C64::readIo(Address a, Byte& v, bool effects) {
     if (a < 0xDD00) {
         const unsigned r = a & 0x0F;
         switch (r) {
-            case 0x00: v = static_cast<Byte>(s_.cia1[0] | ~s_.cia1[2]); break;
-            case 0x01: v = 0xFF; break;  // no key pressed, no joystick
-            case 0x04: v = static_cast<Byte>(timerA()); break;
-            case 0x05: v = static_cast<Byte>(timerA() >> 8); break;
+            case 0x00: v = static_cast<Byte>((s_.cia1[0] | ~s_.cia1[2]) & ~joy2_); break;
+            case 0x01: {
+                // keyboard rows: a pressed key pulls its row low while its column is driven low through port A
+                const Byte columns = static_cast<Byte>(s_.cia1[0] | ~s_.cia1[2]);
+                Byte rows = 0xFF;
+                for (unsigned c = 0; c < 8; ++c)
+                    if (!((columns >> c) & 1)) rows = static_cast<Byte>(rows & ~keys_[c]);
+                v = static_cast<Byte>((rows & (s_.cia1[1] | ~s_.cia1[3])) & ~joy1_);
+                break;
+            }
+            case 0x04: v = static_cast<Byte>(timerValue(0)); break;
+            case 0x05: v = static_cast<Byte>(timerValue(0) >> 8); break;
+            case 0x06: v = static_cast<Byte>(timerValue(1)); break;
+            case 0x07: v = static_cast<Byte>(timerValue(1) >> 8); break;
             case 0x0D:
                 v = static_cast<Byte>(s_.cia1Icr | ((s_.cia1Icr & s_.cia1Mask) ? 0x80 : 0));
                 if (effects) {
@@ -231,9 +341,13 @@ bool C64::readIo(Address a, Byte& v, bool effects) {
     if (a < 0xDE00) {
         const unsigned r = a & 0x0F;
         if (r == 0x00) v = static_cast<Byte>(s_.cia2[0] | ~s_.cia2[2]);
+        else if (r >= 4 && r <= 7) v = static_cast<Byte>(timerValue(r < 6 ? 2 : 3) >> ((r & 1) * 8));
         else if (r == 0x0D) {
             v = static_cast<Byte>(s_.cia2Icr | ((s_.cia2Icr & s_.cia2Mask) ? 0x80 : 0));
-            if (effects) s_.cia2Icr = 0;
+            if (effects) {
+                s_.cia2Icr = 0;  // reading acknowledges
+                updateNmi();
+            }
         } else v = s_.cia2[r];
         return true;
     }
@@ -273,15 +387,10 @@ bool C64::writeIo(Address a, Byte v) {
             if (v & 0x80) s_.cia1Mask = static_cast<Byte>(s_.cia1Mask | (v & 0x1F));
             else s_.cia1Mask = static_cast<Byte>(s_.cia1Mask & ~v);
             updateIrq();
+        } else if ((r >= 4 && r <= 7) || r == 0x0E || r == 0x0F) {
+            writeTimer(0, r, v);
         } else {
-            const Byte old = s_.cia1[r];
             s_.cia1[r] = v;
-            if (r == 0x04 || r == 0x05) s_.cia1Latch = static_cast<std::uint16_t>(s_.cia1[4] | (s_.cia1[5] << 8));
-            if (r == 0x0E && ((v & 0x10) || ((v & 1) && !(old & 1)))) {  // force load or start
-                s_.cia1Start = cpu_.cycleCount();
-                s_.nextTimer = s_.cia1Start + s_.cia1Latch + 1;
-                s_.cia1[0x0E] = static_cast<Byte>(v & ~0x10);
-            }
         }
     } else if (a < 0xDE00) {
         const unsigned r = a & 0x0F;
@@ -290,6 +399,9 @@ bool C64::writeIo(Address a, Byte v) {
         if (r == 0x0D) {
             if (v & 0x80) s_.cia2Mask = static_cast<Byte>(s_.cia2Mask | (v & 0x1F));
             else s_.cia2Mask = static_cast<Byte>(s_.cia2Mask & ~v);
+            updateNmi();
+        } else if ((r >= 4 && r <= 7) || r == 0x0E || r == 0x0F) {
+            writeTimer(1, r, v);
         } else {
             s_.cia2[r] = v;
         }
@@ -338,16 +450,19 @@ void C64::tick() {
         if (cmp < kRasterLines && (passed >= kRasterLines || dist < passed)) s_.vicIrq = static_cast<Byte>(s_.vicIrq | 0x01);
         s_.lastRasterCheck = line;
     }
-    // CIA 1 timer A (continuous or one-shot)
-    if ((s_.cia1[0x0E] & 1) && cycles >= s_.nextTimer) {
-        const std::uint64_t period = std::uint64_t{s_.cia1Latch} + 1;
-        s_.cia1Icr = static_cast<Byte>(s_.cia1Icr | 0x01);
-        if (s_.cia1[0x0E] & 0x08) {
-            s_.cia1[0x0E] = static_cast<Byte>(s_.cia1[0x0E] & ~1);
-        } else {
-            s_.nextTimer += ((cycles - s_.nextTimer) / period + 1) * period;
-        }
+    // CIA timers counting cycles (continuous or one-shot)
+    for (unsigned i = 0; i < 4; ++i) {
+        State::Timer& t = s_.timers[i];
+        if (!(control(i) & 1) || !countsCycles(i) || cycles < t.next) continue;
+        const std::uint64_t period = std::uint64_t{t.latch} + 1;
+        const std::uint64_t n = control(i) & 0x08 ? 1 : (cycles - t.next) / period + 1;
+        const std::uint64_t last = t.next + (n - 1) * period;  // the most recent underflow: the counter was reloaded with the latch
+        t.start = last;
+        t.counter = t.latch;
+        t.next = last + period;
+        timerUnderflows(i, n);
     }
+    updateNmi();
     updateIrq();
 }
 

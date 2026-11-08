@@ -138,6 +138,15 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         analysis_ = std::make_unique<Analysis>(*analysisView_, from, to);
         analysis_->setDataBarrier([this](Address a) { return ann_.dataCovering(a) != nullptr; });
         for (const Address e : entries) analysis_->addEntry(e);
+        std::size_t hints = 0;
+        if (flag("use_executed")) {
+            if (!m_.cpu().trackingExecution()) throw AnalysisError("use_executed needs track_execution (and a run) first");
+            for (const Address a : m_.cpu().executedAddresses())
+                if (a >= from && a < to) {
+                    analysis_->addCodeHint(a);
+                    ++hints;
+                }
+        }
         for (const auto& [ra, region] : ann.dataRegions()) {
             if (region.kind == DataKind::Pointers) analysis_->addPointerTable(ra, region.length, false);
             if (region.kind == DataKind::RtsPointers) analysis_->addPointerTable(ra, region.length, true);
@@ -148,6 +157,7 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         Json j = ok;
         j.set("from", hex4(from)).set("to", to == 0x10000 ? std::string("0x10000") : hex4(to));
         j.set("code_bytes", analysis_->codeBytes()).set("range_bytes", to - from);
+        if (hints) j.set("executed_hints", hints);
         j.set("instructions", analysis_->code().size());
         j.set("routines", analysis_->routines().size());
         j.set("jump_tables", analysis_->jumpTables().size());

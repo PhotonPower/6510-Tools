@@ -138,6 +138,14 @@ public:
     std::function<bool(Cpu&)> executeHook;
     Address hookLow = 1, hookHigh = 0;  ///< empty range by default
 
+    // ---- code coverage: which instructions did the program execute? ------------------------------
+    /// Starts (and clears) or stops marking the address of every instruction the processor executes (not those an
+    /// execute hook handles). The analysis takes them as hints for code it cannot reach by following the flow.
+    void trackExecution(bool on);
+    [[nodiscard]] bool trackingExecution() const { return trackingExec_; }
+    [[nodiscard]] bool executed(Address a) const { return trackingExec_ && executed_[a] != 0; }
+    [[nodiscard]] std::vector<Address> executedAddresses() const;
+
     // ---- self-extracting programs: which memory did the program write? ---------------------------
     /// Starts (and clears) or stops marking every byte the processor writes.
     void trackWrites(bool on);
@@ -210,7 +218,8 @@ private:
     bool portEnabled_ = true;
     Byte portDir_ = 0, portData_ = 0, portInputs_ = 0x17;
     Address startPc_ = 0;
-    bool tracking_ = false, watchWritten_ = false;
+    bool tracking_ = false, watchWritten_ = false, trackingExec_ = false;
+    std::vector<std::uint8_t> executed_;
     std::vector<std::uint8_t> written_;
     std::size_t watchMin_ = 1;
     std::vector<std::pair<Address, std::uint32_t>> watchIgnore_;

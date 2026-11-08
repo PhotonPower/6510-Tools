@@ -56,7 +56,7 @@ Disassembler, Emulator, C64-Maschine, Agenten-Schnittstelle, Monitor, Reverse En
 
 **Commodore 64** ([docs/c64.md](docs/c64.md)) – *fertig*
 - Speicherkarte mit allen Konfigurationen von `$01` (BASIC/KERNAL/Zeichensatz-ROM, I/O), Farb-RAM, VIC-II/SID/CIA-Register als
-  Speicher mit **Schreibprotokoll** und Registernamen; Rasterzeile und CIA-1-Timer A aus dem Zyklenzähler (Raster- und
+  Speicher mit **Schreibprotokoll** und Registernamen; Rasterzeile und alle vier CIA-Timer aus dem Zyklenzähler (Raster-, Timer-IRQs und
   Timer-IRQs)
 - **KERNAL-Emulation** ohne ROM: echte Sprungtabelle über die RAM-Vektoren, `CHROUT` auf Konsole und Bildschirm, `GETIN`,
   `PLOT`, `LOAD`/`SAVE`, Jiffy-Uhr über den IRQ, …; alles andere wird protokolliert. Echte ROMs (eigene Kopie, nie im
