@@ -64,14 +64,14 @@ Agenten-Schnittstelle (`Session`) sind weitere Frontends derselben Bibliothek un
 | `kernal.hpp`                | `Kernal`: erzeugtes KERNAL-Abbild, nachgebildete Routinen, Aufrufprotokoll              | fertig   |
 | `video.hpp`, `png.hpp`      | VIC-II-Bild aus dem Speicherzustand (Text- und Bitmap-Modi, Ersatzzeichensatz, Paletten), PNG-Ausgabe (ohne externe Bibliothek), Base64 | fertig (ohne Sprites) |
 | `machine.hpp`               | `Machine`: Speicher, CPU, C64 und KERNAL-Emulation, Symbole, Checkpoints, Watchpoints, Dateien laden | fertig |
-| `session.hpp`               | `Session`: JSON-Befehle über einer `Machine`                                            | fertig (ohne Analyse) |
-| `analysis.hpp`              | Codefluss-Analyse: Befehle, Routinen, Aufrufgraph, KERNAL-Aufrufe, Sprungtabellen, Datentypen | geplant |
-| `annotations.hpp`           | Namen, Dokumentation, Variablen, Datenbereiche, Kommentare; JSON                        | geplant  |
-| `listing.hpp`               | verifiziertes, neu assemblierbares Listing                                              | geplant  |
+| `session.hpp`               | `Session`: JSON-Befehle über einer `Machine`                                            | fertig   |
+| `analysis.hpp`              | Codefluss-Analyse: Befehle, Routinen, Aufrufgraph, KERNAL-Aufrufe, I/O, Zero Page, Sprungtabellen (`vector`, `rts`, `lohi`, `pointers`), Immediate-Zeiger, Interrupt-Handler, selbstmodifizierender Code, Datentypen | fertig |
+| `annotations.hpp`           | Namen (mit Prüfung), Dokumentation, Variablen, Datenbereiche, Kommentare, Konstanten; JSON | fertig   |
+| `listing.hpp`               | verifiziertes, neu assemblierbares Listing                                              | fertig   |
 | `monitor.hpp`               | `Monitor`: Zeilenschnittstelle (`execute(zeile) → Text`) über einer `Machine`, Hex-Standard | fertig (ohne `shot`) |
 
-Zu `session.hpp` gehören wie bei den Schwesterprojekten `src/session.cpp` (Maschine, Programm, Lauf),
-`src/session_analysis.cpp` (Analyse, Annotationen, Listing) und `src/session_impl.hpp` (interne Hilfen).
+Zu `session.hpp` gehören wie bei den Schwesterprojekten `src/session.cpp` (Maschine, Programm, Lauf, Bildschirm) und
+`src/session_analysis.cpp` (Analyse, Annotationen, Listing).
 
 ## Die Opcode-Tabelle
 

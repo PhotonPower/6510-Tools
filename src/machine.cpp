@@ -18,16 +18,6 @@ std::string upper(std::string s) {
 
 }  // namespace
 
-char screenCodeToChar(Byte code) {
-    const auto sc = static_cast<Byte>(code & 0x7F);
-    if (sc == 0) return '@';
-    if (sc <= 26) return static_cast<char>('A' + sc - 1);
-    if (sc == 27) return '[';
-    if (sc == 29) return ']';
-    if (sc >= 32 && sc < 64) return static_cast<char>(sc);
-    return '.';
-}
-
 Machine::Machine() { select(false, false); }
 
 Machine::~Machine() {
@@ -42,6 +32,7 @@ void Machine::select(bool c64, bool kernalEmulation) {
     memory_ = std::make_unique<Memory>();
     cpu_ = std::make_unique<Cpu>(*memory_);
     symbols.clear();
+    programRange.reset();
     checkpoints.clear();
     watches_.clear();
     attached_.clear();
@@ -184,6 +175,7 @@ LoadedFile Machine::loadFile(const std::string& path, const std::string& request
     }
     if (p.end() > 0x10000) throw std::runtime_error("the program does not fit below $FFFF");
     loadProgram(*memory_, p);
+    if (!p.bytes.empty()) programRange = std::make_pair(p.address, static_cast<std::uint32_t>(p.end()));
     out.entry = p.address;
     if (p.address == 0x0801) {
         if (auto t = findSysTarget(*memory_, p.address)) {

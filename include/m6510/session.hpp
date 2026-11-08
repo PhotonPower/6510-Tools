@@ -3,10 +3,13 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "m6510/analysis.hpp"
+#include "m6510/annotations.hpp"
 #include "m6510/c64.hpp"
 #include "m6510/cpu.hpp"
 #include "m6510/json.hpp"
@@ -50,8 +53,20 @@ private:
     struct Impl;
     friend struct Impl;
 
+    /// The reverse-engineering commands (src/session_analysis.cpp).
+    Json analysisCommand(const std::string& cmd, const Json& request);
+    [[nodiscard]] static bool isAnalysisCommand(const std::string& cmd);
+    /// A number or expression argument (symbols, registers) as in every other command.
+    std::int64_t argValue(const Json& value, const std::string& what);
+    void resetAnalysis();
+
     SessionOptions options_;
     Machine m_;
+    Annotations ann_;
+    std::unique_ptr<Memory> analysisView_;  // the RAM as it was at the last analyze
+    std::unique_ptr<Analysis> analysis_;
+    std::set<Address> analysisEntries_;
+    std::vector<std::pair<Address, std::uint32_t>> linearRanges_;
     std::map<std::string, IndexedImage> screens_;  // named screenshots (full screen) for screen_diff
 };
 

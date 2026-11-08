@@ -22,6 +22,10 @@ namespace m6510 {
 /// by name (`{CLR}`, `{RED}`, `{DOWN}`, ...), everything else as `{$xx}`.
 [[nodiscard]] std::string petsciiToText(Byte b);
 
+/// Screen code -> printable ASCII character for a text view of the screen (`@`, letters, digits and
+/// punctuation; reversed characters like the normal ones; '.' for graphics characters).
+[[nodiscard]] char screenCodeToChar(Byte code);
+
 /// BASIC V2 keyword for a token ($80-$CB, $FF = pi); empty for other bytes.
 [[nodiscard]] std::string basicToken(Byte token);
 

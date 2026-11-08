@@ -41,6 +41,8 @@ endfunction()
 # New components (opcode table, decoder, assembler, cpu, c64, ...) are added to this list as
 # they are written; see docs/architecture.md for the planned layout.
 add_library(m6510core STATIC
+  src/analysis.cpp
+  src/annotations.cpp
   src/assembler.cpp
   src/c64.cpp
   src/cpu.cpp
@@ -52,12 +54,14 @@ add_library(m6510core STATIC
   src/image_io.cpp
   src/json.cpp
   src/kernal.cpp
+  src/listing.cpp
   src/machine.cpp
   src/monitor.cpp
   src/opcodes.cpp
   src/png.cpp
   src/petscii.cpp
   src/session.cpp
+  src/session_analysis.cpp
   src/snapshot.cpp
   src/video.cpp)
 target_include_directories(m6510core PUBLIC include)

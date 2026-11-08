@@ -1,6 +1,8 @@
 # Reverse Engineering mit lokalem LLM
 
-> **Stand 0.1:** geplant (Meilenstein 0.5). Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
+> **Stand 0.5:** Analyse, Sprungtabellen, Datentypen, Annotationen, verifiziertes Listing und Screenshots sind im Server
+> umgesetzt (`m6510tool serve`, [agent-protocol.md](agent-protocol.md#reverse-engineering-reverse-engineeringmd)); der
+> Orchestrator `agent/m6510_annotate.py` und `agent/m6510_drive.py` folgen im dritten Teil von 0.5. Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
 > `agent/m68k_annotate.py` / `agent/m68k_drive.py` (Analyse, Sprungtabellen, Datentypen, Blindtest-Befunde) der
 > Schwesterprojekte. Was sich dort bewährt hat, wird übernommen; dieses Dokument nennt die 6510-spezifischen Teile.
 
@@ -65,11 +67,18 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
   bekannter Einsprünge vorhanden ist.
 - **I/O-Zugriffe** je Routine: welche VIC-/SID-/CIA-Register gelesen und geschrieben werden (starker Hinweis auf den Zweck:
   `$D020` Rahmenfarbe, `$D418` Lautstärke, `$DC01` Tastatur …).
-- **Zero Page:** benutzte Adressen, Zeigerpaare (`($FB),Y` → `$FB/$FC` als 16-Bit-Zeiger), Vorschläge für Namen.
+- **Zero Page:** benutzte Adressen je Routine, Zeigerpaare (`($FB),Y` → `$FB/$FC`); mit `ann_variable … size:2` heißen
+  die Zugriffe `ptr` und `ptr+1`.
+- **Zeiger als Immediate-Paare:** `LDA #<text / LDY #>text` (Registerpaar A/Y bzw. X/Y wie bei den KERNAL-Aufrufen) und
+  `LDA #<x / STA z / LDA #>x / STA z+1` werden erkannt, wenn das Ziel im Programm liegt; das Listing schreibt `#<name` /
+  `#>name`, solange der Befehl nicht mit `ann_constant` als reine Zahl markiert ist.
+- **Interrupt-Handler:** ein so eingetragener Zeiger in `$0314` (IRQ), `$0316` (BRK), `$0318` (NMI), `$FFFE` oder `$FFFA`
+  macht das Ziel zu einem Einstiegspunkt.
 - **Selbstmodifizierender Code:** Befehle, deren Operand von anderem Code geschrieben wird (`STA patch+1`), werden markiert;
-  das Listing schreibt `patch+1` und kommentiert die Stelle. Die Analyse folgt `JMP`/`JSR` mit veränderbarem Ziel nicht blind.
-- **Banking:** Schreibt das Programm `$01`, wird das gemeldet (z. B. „schaltet BASIC und KERNAL aus: `$35`“); Code unter ROM
-  wird in der RAM-Sicht analysiert.
+  das Listing schreibt `patch+1` und kommentiert die Stelle („self-modifying: written by $xxxx“). Das Ziel eines solchen
+  Befehls ist das, was im Speicher steht – die Analyse kann den späteren Wert nicht kennen.
+- **Banking:** Schreibt das Programm `$01`, wird das je Routine gemeldet (`port_writes` mit dem Wert, wenn er direkt davor
+  geladen wird); Code unter ROM wird in der RAM-Sicht analysiert.
 
 ## Sprungtabellen
 
@@ -86,12 +95,13 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
 |---|---|
 | `text` (PETSCII) | druckbare PETSCII-Zeichen, mit `0`, `$0D` oder gesetztem Bit 7 am Ende; über `CHROUT`-Schleifen referenziert |
 | `screen` (Bildschirmcodes) | Bytes, die in den Bildschirmspeicher kopiert werden; Listing als `.SCREEN "…"` |
-| `lohi`, `pointers`, `words`, `bytes` | Zugriffsmuster (`LDA tab,X` mit gleichem Index auf zwei Tabellen, …) |
-| `sprites` | 63-Byte-Blöcke an 64-Byte-Grenzen, auf die Sprite-Zeiger (`$07F8–$07FF` bzw. Bildschirm + `$3F8`) zeigen; Listing mit Bitmuster-Kommentar |
-| `charset` | 2-KiB-Bereich, auf den `$D018` zeigt |
-| `bitmap`, `colors` | 8000 Byte Bitmap / 1000 Byte Farben im Bitmap-Modus |
-| `basic` | BASIC-Programm am Anfang (detokenisiert als Kommentar, `.BASIC` für einen reinen Starter) |
-| `zeros` | Nullbereiche → `.FILL` |
+| `words`, `pointers` | Tabelle, auf die mit `LDA tab,X` und `LDA tab+1,X` zugegriffen wird; `pointers`, wenn jeder Eintrag auf einen Befehl zeigt |
+| `lohi`, `rts_pointers` | aus den Sprungtabellen (oder von Hand annotiert); Listing als `.LO`/`.HI` bzw. `.WORD ziel-1` |
+| `sprites` | 64-Byte-Block, auf den ein Sprite-Zeiger (`LDA #n / STA $07F8–$07FF`) zeigt; Listing mit Bitmuster-Kommentar |
+| `charset` | Bereich, auf den `LDA #n / STA $D018` zeigt (außer dem Zeichensatz-ROM bei `$1000/$1800`); Listing 8 Byte je Zeichen |
+| `basic` | BASIC-Programm bei `$0801`; ein reiner Starter wird `.BASIC zeile,ziel` |
+| `zeros` | Nullbereiche ab 8 Byte (das Listing schreibt ab 16 Byte `.FILL`) |
+| `bitmap`, `colors` | 8000 Byte Bitmap / 1000 Byte Farben im Bitmap-Modus – Idee |
 
 ## Ohne Modell: von Hand oder durch einen Agenten
 

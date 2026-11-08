@@ -13,6 +13,14 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   Paletten **Colodore** (Standard) und Pepto, PNG-Encoder und Base64 aus dem Z80-Projekt. Protokollbefehle `screenshot`
   (Ausschnitt in Textzellen, Zoom), `screens`, `screen_drop`, `screen_diff`; Monitor `shot`. Test `video`.
   Offene Frage 3 (Palette) entschieden.
+- **Meilenstein 0.5, zweiter Teil – Analyse und verifiziertes Listing:** `Analysis` (Codefluss, Routinen mit Aufrufgraph und
+  Tiefe, KERNAL-Aufrufe, I/O-Zugriffe, Zero Page, `$01`-Schreibzugriffe, Sprungtabellen `vector`/`rts`/`lohi`/`pointers`,
+  Zeiger in Immediate-Paaren, Interrupt-Handler aus `$0314`/`$0318`/…, selbstmodifizierender Code, Datentypen Text/
+  Bildschirmcodes/Nullen/Wort- und Zeigertabellen/Sprites/Zeichensatz/BASIC), `Annotations` (Namensregeln, JSON),
+  `renderListing` (neu assembliert und Byte für Byte verglichen). Protokollbefehle `analyze`, `routines`, `references`,
+  `jump_tables`, `data_regions`, `listing`, `ann_*`. Beispielprogramm `examples/c64/hello_c64.asm`. Tests `reverse`,
+  `jumptable`, `datatypes` (Zufallsprogramme mit Zufallsannotationen: jedes Listing verifiziert).
+  - `m6510::Machine` merkt sich den Bereich des zuletzt geladenen oder assemblierten Programms.
 - **Meilenstein 0.4 – Monitor** (`m6510::Monitor`, `m6510tool monitor`): klassische Eingabeschleife wie bei den
   Schwesterprojekten, Zahlen hexadezimal (`100.` dezimal, Präfixe, Symbole, `@`-Register): `d`, `m`/`m.s`, `e`/`e.w`, `f`,
   `c`, `t`, `h`, Assemble-Modus `a` (Labels, Zuweisungen, Direktiven), `r`, `n`, `o`, `u`, `g`, `ru`, `b`/`bc`/`w`, `limit`,

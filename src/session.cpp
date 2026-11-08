@@ -222,7 +222,12 @@ struct Session::Impl {
             for (const auto& [n, v] : s.m_.symbols) j.set(n, hex4(static_cast<unsigned>(v)));
             return ok().set("symbols", j);
         }
-        if (cmd == "machine") return cmdMachine();
+        if (cmd == "machine") {
+            Json j = cmdMachine();
+            s.resetAnalysis();
+            return j;
+        }
+        if (isAnalysisCommand(cmd)) return s.analysisCommand(cmd, req);
         throw SessionError("unknown command '" + cmd + "' (try {\"cmd\":\"help\"})");
     }
 
@@ -234,7 +239,10 @@ struct Session::Impl {
                               "step_over", "run", "run_until_return", "call", "run_program", "break", "unbreak", "breaks",
                               "clear_breaks", "watch", "unwatch", "checkpoint", "rollback", "drop", "checkpoints", "diff",
                               "state", "set_state", "save_state", "load_state", "interrupt", "io", "kernalcalls", "console",
-                              "keys", "screen", "screenshot", "screens", "screen_drop", "screen_diff", "reset", "symbols", "machine", "help"})
+                              "keys", "screen", "screenshot", "screens", "screen_drop", "screen_diff", "analyze", "routines",
+                              "references", "listing", "jump_tables", "data_regions", "ann_label", "ann_routine", "ann_variable",
+                              "ann_data", "ann_comment", "ann_constant", "ann_remove", "ann_title", "ann_list", "ann_save",
+                              "ann_load", "reset", "symbols", "machine", "help"})
             list.push(c);
         return ok().set("commands", list).set("docs", "docs/agent-protocol.md");
     }
@@ -268,6 +276,7 @@ struct Session::Impl {
             return Json::object().set("ok", false).set("error", "assembly failed").set("errors", errors);
         }
         Json segs = Json::array();
+        if (!r.empty()) s.m_.programRange = std::make_pair(r.lowest(), r.end());
         for (const Segment& seg : r.segments) {
             s.m_.memory().load(seg.address, seg.bytes);
             segs.push(Json::object().set("start", hex4(seg.address)).set("size", seg.bytes.size()));
@@ -763,6 +772,19 @@ struct Session::Impl {
 Session::Session(SessionOptions options) : options_(options) {}
 
 Session::~Session() = default;
+
+std::int64_t Session::argValue(const Json& value, const std::string& what) {
+    const Json dummy = Json::object();
+    return Impl{*this, dummy}.value(value, what);
+}
+
+void Session::resetAnalysis() {
+    ann_.clear();
+    analysis_.reset();
+    analysisView_.reset();
+    analysisEntries_.clear();
+    linearRanges_.clear();
+}
 
 Json Session::handle(const Json& request) {
     try {

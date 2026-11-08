@@ -1,7 +1,7 @@
 # Agenten-Protokoll (`m6510tool serve`)
 
-> **Stand 0.5 (Teil 1):** Grundbefehle, Lauf, Checkpoints, Snapshots, die C64-Befehle und `screenshot` mit den Bildvergleichen
-> sind umgesetzt (Abschnitt „Befehle“). Die Reverse-Engineering-Befehle (0.5) und die Entpack-Befehle (0.6) sind noch
+> **Stand 0.5:** Grundbefehle, Lauf, Checkpoints, Snapshots, die C64-Befehle, `screenshot` mit den Bildvergleichen und die
+> Reverse-Engineering-Befehle sind umgesetzt (Abschnitt „Befehle“). Die Entpack-Befehle (0.6) sind noch
 > **geplant** und unten gekennzeichnet. Grundregeln und Befehlsnamen sind die von
 > [`z80tool serve`](https://github.com/PhotonPower/Z80/blob/main/docs/agent-protocol.md) und
 > [`m68ktool serve`](https://github.com/PhotonPower/MC68000/blob/main/docs/agent-protocol.md), damit ein Orchestrator
@@ -105,28 +105,38 @@ Gesamtzähler seit dem letzten `reset`.
 | `machine` | `type`, `kernal?` (`hle`, `rom`) | Maschine wählen (siehe oben) |
 | `help` | – | Befehlsliste |
 
-Geplant (Meilensteine 0.5/0.6):
+Geplant (Meilenstein 0.6):
 
 | Befehl | Zweck |
 |---|---|
 | `track_writes`, `written`, `run_until_unpacked`, `save_memory` | selbstentpackende Programme ([unpacking.md](unpacking.md)) |
-| `analyze`, `data_regions`, `jump_tables`, `routines`, `references`, `listing`, `ann_*` | Reverse Engineering, siehe unten |
 
-### Reverse Engineering ([reverse-engineering.md](reverse-engineering.md)) – geplant
+### Reverse Engineering ([reverse-engineering.md](reverse-engineering.md))
 
-Dieselben Befehle wie beim MC68000 (`analyze`, `data_regions`, `jump_tables`, `routines`, `references`, `listing`,
-`ann_label`, `ann_routine`, `ann_variable`, `ann_data`, `ann_comment`, `ann_constant`, `ann_remove`, `ann_title`, `ann_list`,
-`ann_save`, `ann_load`) mit diesen Unterschieden:
+Dieselben Befehle wie beim MC68000, angepasst an den 6510. Die Analyse arbeitet auf einer Kopie des **RAM** zum Zeitpunkt
+von `analyze` (unter ROM liegender Code wird also in der RAM-Sicht gelesen). Adressen dürfen wie überall Zahlen, Marken
+oder Ausdrücke sein; das Ende eines Bereichs darf `0x10000` sein.
 
-| Befehl | 6510-spezifisch |
-|---|---|
-| `analyze` | Standard-Einstieg: PC bzw. `SYS`-Adresse; `JMP (vektor)` und der `RTS`-Trick werden verfolgt; Analyse in der **RAM-Sicht**, KERNAL-/BASIC-Aufrufe als externe Aufrufe |
-| `data_regions` | Arten `text` (PETSCII), `screen` (Bildschirmcodes), `pointers`, `lohi` (getrennte Tabellen), `bytes`, `words`, `sprites`, `charset`, `zeros` |
-| `jump_tables` | Arten `vector` (`JMP (abs)`), `rts` (Stapel-Trick), `lohi`, `pointers` |
-| `routines` | zusätzlich `kernal_calls`, `io_access` (gelesene/geschriebene Register), `zero_page` (benutzte Zero-Page-Adressen) |
-| `references` | Arten zusätzlich `kernal`, `io`, `zeropage`, `selfmod` (Befehl wird von anderem Code verändert) |
-| `listing` | Labels mitten im Befehl als `name+n` (selbstmodifizierender Code); KERNAL- und I/O-Namen als `=`-Zeilen am Anfang |
-| `ann_variable` | Zero-Page-Variablen und -Zeiger (`size:2`) |
+| Befehl | Argumente | Wirkung / Antwort |
+|---|---|---|
+| `analyze` | `from?`, `to?` (Standard: das zuletzt geladene oder assemblierte Programm), `entries?` (Liste), `linear?` (`{"from","to"}`), `reset?` | Codefluss-Analyse ab den Einstiegspunkten; ohne Einstiegspunkte die `SYS`-Adresse eines BASIC-Starters bei `$0801`, sonst der PC (`default_entry:true`). Einstiegspunkte und lineare Bereiche sammeln sich über mehrere Aufrufe (`reset:true` leert sie). Verfolgt werden `JSR`/`JMP`/Verzweigungen, `JMP (vektor)` mit festem Vektor, der **`RTS`-Trick** und getrennte **Low-/High-Tabellen**, als `pointers`/`rts_pointers`/`lohi` annotierte Tabellen und Interrupt-Handler, die das Programm einträgt (`$0314`, `$0316`, `$0318`, `$FFFE`, `$FFFA`). Antwort: `from`, `to`, `code_bytes`, `range_bytes`, `instructions`, `routines`, `jump_tables`, `entries`, `interrupt_handlers:[{handler,vector}]` |
+| `routines` | `order?` (`bottom_up` = Blätter zuerst, `address`), `undocumented_only?` | je Routine: `addr`, `name` (`sub_XXXX` oder der vergebene Name), `documented`, `confidence`, Dokumentation, `start`/`end`, `blocks`, `instructions`, `bytes`, `depth`, `via_table`, `interrupt_vector`, `callers`, `callees:[{addr,name,documented}]`, `external_calls`, `kernal_calls:[{at,addr,name}]`, `io_access:{reads,writes}` (mit Registernamen), `zero_page` (Variablennamen, wenn vergeben), `port_writes:[{at,value?}]` (Schreiben von `$00/$01`). Eine Adresse, die nur per `JMP` erreicht wird, gehört zur springenden Routine |
+| `references` | `from?`, `to?` | worauf der Bereich zugreift: `references:[{addr,name,kind,length,preview?,used_at,uses}]`; `kind` = `code`, eine Datenart (`text`, `screen`, …), `variable`, `io`, `kernal`, `zeropage`, `selfmod` (der Bereich schreibt in einen Befehl), `external`, `unknown`. Zeiger aus Immediate-Paaren (`LDA #<text / LDY #>text`) zählen mit |
+| `jump_tables` | `max_entries?` (64) | `tables:[{kind,jump?,table,hi_table?,minus_one,bytes,followed,entry_count,entries:[{slot,target,name}],hint?}]`; `kind` = `vector`, `rts`, `lohi`, `pointers`. Eine `pointers`-Tabelle, die nur beim Durchsuchen gefunden wurde, ist ein Vorschlag (`followed:false`) |
+| `data_regions` | `apply?` | Vermutungen über die Bytes, die weder Code noch annotiert sind: `regions:[{addr,length,kind,reason,preview?,applied?}]`, `kind` = `text` (PETSCII), `screen` (Bildschirmcodes, in den Bildschirm kopiert), `zeros`, `words`, `pointers`, `sprites` (über einen Sprite-Zeiger), `charset` (über `$D018`), `basic`. Mit `apply:true` werden sie als Datenbereiche übernommen (außer `zeros`/`basic`, die das Listing ohnehin richtig schreibt) |
+| `listing` | `from?`, `to?` (im analysierten Bereich), `addresses?`, `verify?` (true), `max_chars?` | verifiziertes Listing: `listing`, `verified`, `truncated`, `unnamed` (noch nicht benannte Platzhalter), `instructions`, `user_comments`, `problem?`. Gekürzte Listings sind nicht verifiziert |
+| `ann_label` | `addr`, `name` | Namen vergeben (gültiges Symbol, kein Register, Mnemonic, KERNAL- oder Registername, kein Platzhalter `sub_XXXX`, nicht doppelt) |
+| `ann_routine` | `addr`, `name?`, `summary?`, `inputs?`, `outputs?`, `clobbers?`, `confidence?` (`high`, `medium`, `low`) | Routine dokumentieren (Kopfblock im Listing) |
+| `ann_variable` | `addr`, `name`, `size?` (1; `2` für einen Zeiger), `comment?` | Variable; Zugriffe auf `addr+1` erscheinen als `name+1` |
+| `ann_data` | `addr`, `length`, `kind?` (`bytes`, `words`, `text`, `screen`, `pointers`, `rts_pointers`, `lohi`, `sprites`, `charset`), `partner?` und `minus_one?` (für `lohi`: Tabelle der High-Bytes, Einträge = Adresse − 1), `name?`, `comment?` | Datenbereich; darf keinen analysierten Code überdecken. `pointers`, `rts_pointers` und `lohi` werden beim nächsten `analyze` als Sprungtabellen verfolgt |
+| `ann_comment` | `addr`, `text`, `block?` | Zeilenkommentar bzw. Kommentarblock über der Zeile; nicht in der Mitte eines Befehls |
+| `ann_constant` | `addr`, `remove?` | der Immediate-Wert des Befehls ist eine Zahl, kein halber Zeiger (kein `#<name`) |
+| `ann_remove` | `addr` | Name, Routinen-/Variablen-/Datenangabe und Kommentare an der Adresse entfernen: `removed` |
+| `ann_title` | `title` | Titel des Listings |
+| `ann_list` | – | alle Annotationen (`annotations`, Format der Projektdatei) |
+| `ann_save` / `ann_load` | `file` | Annotationen speichern / laden (*`--allow-files`*; [formats.md](formats.md#annotationen)); beim Laden gelten dieselben Regeln wie bei den Einzelbefehlen |
+
+Ein Maschinenwechsel (`machine`) löscht Analyse und Annotationen.
 
 ## Typischer Ablauf
 
