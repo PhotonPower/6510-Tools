@@ -121,7 +121,7 @@ Bestätigt am 2026-11-08 (Punkte 2, 5, 6 und 8 ausdrücklich, ebenso die offene 
    eigenen C64 bereit; sie würde in der CI nur über ein GitHub-Secret angesprochen, nie im Repository oder im Log stehen.
 2. **Registernamen** im I/O-Protokoll und im Disassembler – *umgesetzt wie vorgeschlagen:* die Namen aus „Mapping the
    Commodore 64“ (`EXTCOL`, `BGCOL0`, `SCROLY`, …). Lässt sich ändern, solange noch keine Projektdateien davon abhängen.
-3. **Palette** für Screenshots: Pepto oder Colodore? Vorschlag: Colodore (neuere Messung), per Option umschaltbar.
+3. **Palette** für Screenshots – *umgesetzt wie vorgeschlagen:* Colodore (neuere Messung), Pepto per Option.
 4. **Verhalten der instabilen Opcodes** – *entschieden:* `$EE` für `ANE` und `LXA`, wie in Tom Hartes Testsatz (aus den
    Testdaten ermittelt); die übrigen instabilen Opcodes ebenfalls nach dem Testsatz ([emulator.md](emulator.md)).
 5. **Schreibzugriffe auf `$00/$01`** – *umgesetzt wie vorgeschlagen:* der geschriebene Wert landet auch im RAM

@@ -261,11 +261,11 @@ int main() {
         const char* cmds[] = {"asm", "dis", "read", "write", "regs", "set", "step", "step_over", "run", "run_until_return",
                               "call", "break", "unbreak", "breaks", "watch", "unwatch", "checkpoint", "rollback", "diff",
                               "state", "set_state", "interrupt", "reset", "symbols", "machine", "io", "kernalcalls",
-                              "console", "keys", "screen", "run_program", "help"};
+                              "console", "keys", "screen", "screenshot", "screens", "screen_diff", "screen_drop", "run_program", "help"};
         const char* values[] = {"0", "1", "-5", "\"0xC000\"", "\"$FFFF\"", "\"loop\"", "true", "null", "[]", "{}",
                                 "\"A\"", "\"c64\"", "\"generic\"", "70000", "\"\"", "\"LDA #1\\n BRK\""};
         const char* keys[] = {"addr", "len", "n", "source", "hex", "regs", "name", "type", "kind", "text", "max_instructions",
-                              "count", "until", "memory", "state", "entry", "origin"};
+                              "count", "until", "memory", "state", "entry", "origin", "crop", "zoom", "border", "a", "b", "palette"};
         for (int i = 0; i < 3000; ++i) {
             std::string line = std::string("{\"cmd\":\"") + cmds[rng() % (sizeof(cmds) / sizeof(*cmds))] + "\"";
             const int nargs = static_cast<int>(rng() % 4);
@@ -290,6 +290,49 @@ int main() {
         const Json r = call(s, R"({"cmd":"step"})");
         CHECK_EQ(str(r, "pc"), std::string("0xC000"));
         CHECK_EQ(num(r, "interrupts"), 1);
+    }
+
+    // screenshots
+    {
+        Session s;
+        CHECK(!ok(call(s, R"({"cmd":"screenshot"})")));  // generic machine
+        call(s, R"({"cmd":"machine","type":"c64"})");
+        Json r = call(s, R"({"cmd":"screenshot"})");
+        CHECK(ok(r));
+        CHECK_EQ(num(r, "width"), 320);
+        CHECK_EQ(num(r, "height"), 200);
+        CHECK_EQ(str(r, "name"), std::string("last"));
+        CHECK_EQ(str(r, "mode"), std::string("text"));
+        CHECK_EQ(str(r, "charset"), std::string("replacement"));
+        CHECK_EQ(str(r, "png_base64").substr(0, 8), std::string("iVBORw0K"));  // PNG signature
+        r = call(s, R"({"cmd":"screenshot","name":"before","border":true,"palette":"pepto"})");
+        CHECK_EQ(num(r, "width"), 384);
+        r = call(s, R"({"cmd":"screenshot","crop":{"col0":0,"row0":0,"col1":3,"row1":1}})");
+        CHECK_EQ(num(r, "width"), 32 * 8);  // 4 cells = 32 px, zoom 320/32 -> 8 (at most)
+        CHECK_EQ(num(r, "zoom"), 8);
+        r = call(s, R"({"cmd":"screenshot","crop":{"col0":0,"row0":0,"col1":39,"row1":24},"zoom":2})");
+        CHECK_EQ(num(r, "width"), 640);
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","crop":{"col0":5,"row0":0,"col1":3,"row1":1}})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","crop":{"col0":0,"row0":0,"col1":40,"row1":1}})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","crop":[1,2]})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","zoom":9})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","palette":"vice"})")));
+        call(s, R"({"cmd":"screenshot","name":"a"})");
+        r = call(s, R"({"cmd":"screens"})");
+        CHECK_EQ(r.find("screens")->items().size(), std::size_t{3});  // last, before, a
+        r = call(s, R"({"cmd":"screen_diff","a":"a"})");
+        CHECK_EQ(num(r, "changed_pixels"), 0);
+        call(s, R"({"cmd":"write","addr":"0x0400","hex":"A0"})");  // reversed space in the top left cell
+        call(s, R"({"cmd":"write","addr":"0xD800","hex":"01"})");
+        r = call(s, R"({"cmd":"screen_diff","a":"a"})");
+        CHECK_EQ(num(r, "changed_pixels"), 64);
+        CHECK_EQ(num(*r.find("text_cells"), "col1"), 0);
+        CHECK_EQ(num(*r.find("bbox"), "x1"), 7);
+        r = call(s, R"({"cmd":"screen_diff","a":"a","b":"before"})");
+        CHECK(!r.find("same_size")->asBool());  // 320 x 200 against 384 x 272
+        CHECK(!ok(call(s, R"({"cmd":"screen_diff","a":"nosuch"})")));
+        CHECK(ok(call(s, R"({"cmd":"screen_drop","name":"a"})")));
+        CHECK(!ok(call(s, R"({"cmd":"screen_drop","name":"a"})")));
     }
 
     return finish("session");

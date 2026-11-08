@@ -62,7 +62,7 @@ Agenten-Schnittstelle (`Session`) sind weitere Frontends derselben Bibliothek un
 | `json.hpp`                  | kleiner JSON-Baustein (Parser/Ausgabe, Einfügereihenfolge; aus dem MC68000-Projekt)     | fertig   |
 | `c64.hpp`                   | `C64`: Speicherkarte, Banking über `$01`, ROMs, Farb-RAM, I/O-Register mit Schreibprotokoll, Rasterzähler, Timer A | fertig |
 | `kernal.hpp`                | `Kernal`: erzeugtes KERNAL-Abbild, nachgebildete Routinen, Aufrufprotokoll              | fertig   |
-| `video.hpp`, `png.hpp`      | VIC-II-Bild aus dem Speicherzustand, PNG-Ausgabe (ohne externe Bibliothek)              | geplant  |
+| `video.hpp`, `png.hpp`      | VIC-II-Bild aus dem Speicherzustand (Text- und Bitmap-Modi, Ersatzzeichensatz, Paletten), PNG-Ausgabe (ohne externe Bibliothek), Base64 | fertig (ohne Sprites) |
 | `machine.hpp`               | `Machine`: Speicher, CPU, C64 und KERNAL-Emulation, Symbole, Checkpoints, Watchpoints, Dateien laden | fertig |
 | `session.hpp`               | `Session`: JSON-Befehle über einer `Machine`                                            | fertig (ohne Analyse) |
 | `analysis.hpp`              | Codefluss-Analyse: Befehle, Routinen, Aufrufgraph, KERNAL-Aufrufe, Sprungtabellen, Datentypen | geplant |

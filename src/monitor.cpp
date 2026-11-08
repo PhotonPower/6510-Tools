@@ -14,6 +14,7 @@
 #include "m6510/opcodes.hpp"
 #include "m6510/petscii.hpp"
 #include "m6510/version.hpp"
+#include "m6510/video.hpp"
 
 namespace m6510 {
 
@@ -293,6 +294,7 @@ std::string Monitor::Impl::help() {
            "  io                     writes to chip registers                  kernal   KERNAL calls\n"
            "  console                text printed through CHROUT               screen   text screen (40x25)\n"
            "  keys \"text\"            keys for GETIN/CHRIN                      run [adr]   start like RUN / SYS\n"
+           "  shot file.png [col row w h] [zoom] [border] [pepto]   screen as PNG (box in text cells)\n"
            "  ?  help      q  quit\n";
 }
 
@@ -624,8 +626,41 @@ std::string Monitor::Impl::cmdMachine(const std::vector<std::string>& a) {
 }
 
 std::string Monitor::Impl::cmdC64(const std::string& cmd, const std::vector<std::string>& a) {
-    if (cmd == "shot") throw MonitorError("screenshots (PNG) are planned for milestone 0.5 (docs/roadmap.md)");
     C64& c64 = requireC64(cmd);
+    if (cmd == "shot") {
+        // shot file [col row width height] [zoom] [border] [pepto]: text cells of the 40 x 25 screen
+        requireFiles();
+        if (a.size() < 2) throw MonitorError("usage: shot file.png [col row width height] [zoom] [border] [pepto]");
+        RenderOptions ro;
+        std::vector<std::int64_t> nums;
+        for (std::size_t i = 2; i < a.size(); ++i) {
+            const std::string w = lower(a[i]);
+            if (w == "border") ro.border = true;
+            else if (w == "pepto" || w == "colodore") (void)parsePalette(w, ro.palette);
+            else nums.push_back(value(a[i]));
+        }
+        if (nums.size() != 0 && nums.size() != 1 && nums.size() != 4 && nums.size() != 5)
+            throw MonitorError("usage: shot file.png [col row width height] [zoom] [border] [pepto]");
+        IndexedImage img = renderScreen(c64, mach().memory(), ro);
+        const int ox = ro.border ? 32 : 0, oy = ro.border ? 36 : 0;
+        std::int64_t zoom = 1;
+        if (nums.size() >= 4) {
+            const std::int64_t col = nums[0], row = nums[1], w = nums[2], h = nums[3];
+            if (col < 0 || row < 0 || w < 1 || h < 1 || col + w > 40 || row + h > 25)
+                throw MonitorError("the box must lie inside the 40 x 25 text cells (numbers are hex: 28 = 40)");
+            zoom = nums.size() == 5 ? nums[4] : std::clamp<std::int64_t>(320 / (w * 8), 1, 8);
+            if (zoom < 1 || zoom > 16) throw MonitorError("zoom must be 1..16");
+            img = cropAndZoom(img, ox + static_cast<int>(col) * 8, oy + static_cast<int>(row) * 8,
+                              ox + static_cast<int>(col + w) * 8 - 1, oy + static_cast<int>(row + h) * 8 - 1, static_cast<int>(zoom));
+        } else if (nums.size() == 1) {
+            zoom = nums[0];
+            if (zoom < 1 || zoom > 4) throw MonitorError("zoom must be 1..4 for the whole screen");
+            img = cropAndZoom(img, 0, 0, img.width - 1, img.height - 1, static_cast<int>(zoom));
+        }
+        writeBinaryFile(unquote(a[1]), encodePng(img));
+        return "ok: " + std::to_string(img.width) + " x " + std::to_string(img.height) + " pixels, " + mach().screenMode() +
+               (c64.hasChar() ? "" : ", replacement character set") + "\n";
+    }
     if (cmd == "bank") {
         if (a.size() > 1) {
             const Byte v = byteValue(a[1]);

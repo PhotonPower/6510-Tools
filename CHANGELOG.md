@@ -7,6 +7,12 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Meilenstein 0.5, erster Teil – der Bildschirm als Bild:** `renderScreen` (VIC-II aus dem Speicherzustand: Standard-,
+  Multicolor- und Extended-Background-Text, Hires- und Multicolor-Bitmap, Rahmen, Bild aus, 38 Spalten/24 Zeilen,
+  Feinscrolling, VIC-Bank, Zeichensatz-ROM in Bank 0/2), selbst gezeichneter **Ersatzzeichensatz** (`tools/make_font.py`),
+  Paletten **Colodore** (Standard) und Pepto, PNG-Encoder und Base64 aus dem Z80-Projekt. Protokollbefehle `screenshot`
+  (Ausschnitt in Textzellen, Zoom), `screens`, `screen_drop`, `screen_diff`; Monitor `shot`. Test `video`.
+  Offene Frage 3 (Palette) entschieden.
 - **Meilenstein 0.4 – Monitor** (`m6510::Monitor`, `m6510tool monitor`): klassische Eingabeschleife wie bei den
   Schwesterprojekten, Zahlen hexadezimal (`100.` dezimal, Präfixe, Symbole, `@`-Register): `d`, `m`/`m.s`, `e`/`e.w`, `f`,
   `c`, `t`, `h`, Assemble-Modus `a` (Labels, Zuweisungen, Direktiven), `r`, `n`, `o`, `u`, `g`, `ru`, `b`/`bc`/`w`, `limit`,

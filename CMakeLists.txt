@@ -55,9 +55,11 @@ add_library(m6510core STATIC
   src/machine.cpp
   src/monitor.cpp
   src/opcodes.cpp
+  src/png.cpp
   src/petscii.cpp
   src/session.cpp
-  src/snapshot.cpp)
+  src/snapshot.cpp
+  src/video.cpp)
 target_include_directories(m6510core PUBLIC include)
 target_compile_features(m6510core PUBLIC cxx_std_20)
 m6510_set_warnings(m6510core)

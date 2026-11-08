@@ -42,6 +42,7 @@ public:
     [[nodiscard]] bool hasBasic() const { return hasBasic_; }
     [[nodiscard]] bool hasKernal() const { return hasKernal_; }
     [[nodiscard]] bool hasChar() const { return hasChar_; }
+    [[nodiscard]] const std::array<Byte, 0x1000>& charRom() const { return char_; }
     /// The KERNAL image in use (a real one, or the one generated for the KERNAL emulation).
     [[nodiscard]] const std::array<Byte, 0x2000>& kernalRom() const { return kernal_; }
     std::array<Byte, 0x2000>& kernalRomForEmulation() { return kernal_; }

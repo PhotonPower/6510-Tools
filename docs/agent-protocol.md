@@ -1,7 +1,7 @@
 # Agenten-Protokoll (`m6510tool serve`)
 
-> **Stand 0.3:** Grundbefehle, Lauf, Checkpoints, Snapshots und die C64-Befehle sind umgesetzt (Abschnitt „Befehle“).
-> Die Reverse-Engineering-Befehle (Meilenstein 0.5), `screenshot` (0.5) und die Entpack-Befehle (0.6) sind noch
+> **Stand 0.5 (Teil 1):** Grundbefehle, Lauf, Checkpoints, Snapshots, die C64-Befehle und `screenshot` mit den Bildvergleichen
+> sind umgesetzt (Abschnitt „Befehle“). Die Reverse-Engineering-Befehle (0.5) und die Entpack-Befehle (0.6) sind noch
 > **geplant** und unten gekennzeichnet. Grundregeln und Befehlsnamen sind die von
 > [`z80tool serve`](https://github.com/PhotonPower/Z80/blob/main/docs/agent-protocol.md) und
 > [`m68ktool serve`](https://github.com/PhotonPower/MC68000/blob/main/docs/agent-protocol.md), damit ein Orchestrator
@@ -97,6 +97,9 @@ Gesamtzähler seit dem letzten `reset`.
 | `console` | – | `c64`: `text`, was das Programm seit dem letzten Abruf über `CHROUT` ausgegeben hat (Steuerzeichen als `{CLR}` usw.) |
 | `keys` | `text` | `c64`: Tasten für `GETIN`/`CHRIN` anhängen (`\n` = RETURN) |
 | `screen` | – | `c64`: Bildschirminhalt als Text (`lines`, 25 Zeilen), `mode`, `screen` (Adresse), `bank`, `border`, `background`, `display_on`, `memory` (sichtbare ROM/I/O-Bereiche) |
+| `screenshot` | `name?` (`last`), `border?`, `palette?` (`colodore`, `pepto`), `crop?` (`{"col0":0,"row0":0,"col1":9,"row1":2}`, Textzellen), `zoom?` | `c64`: Bildschirm als PNG ([c64.md](c64.md#video-der-bildschirm-als-bild)): `png_base64`, `width`, `height`, `mode`, `charset` (`rom` oder `replacement`), `zoom`. Ohne `crop` 320×200 (mit Rahmen 384×272), `zoom` 1–4; mit `crop` Standard-Zoom so, dass etwa 320 Pixel Breite entstehen (höchstens 8), `zoom` 1–16. Das ganze Bild wird unter `name` für `screen_diff` gemerkt |
+| `screens` / `screen_drop` | `name` | gemerkte Bilder auflisten (`screens:[{name,width,height}]`) / löschen |
+| `screen_diff` | `a`, `b?` | Bild `a` mit `b` oder dem aktuellen Bildschirm vergleichen: `same_size`, `changed_pixels`, `bbox` (Pixel), `text_cells` (`col0`…`row1`) |
 | `reset` | `memory?` | Zähler auf 0, Register auf Einschaltwerte (mit `memory:true` auch das RAM löschen); auf `c64` mit KERNAL-Emulation zusätzlich der Einschaltzustand der Maschine |
 | `symbols` | – | alle Marken aus `asm` |
 | `machine` | `type`, `kernal?` (`hle`, `rom`) | Maschine wählen (siehe oben) |
@@ -106,7 +109,6 @@ Geplant (Meilensteine 0.5/0.6):
 
 | Befehl | Zweck |
 |---|---|
-| `screenshot` | `c64`: Bildschirm als PNG (Base64) mit Ausschnitt und Vergrößerung – wie im Z80-Projekt |
 | `track_writes`, `written`, `run_until_unpacked`, `save_memory` | selbstentpackende Programme ([unpacking.md](unpacking.md)) |
 | `analyze`, `data_regions`, `jump_tables`, `routines`, `references`, `listing`, `ann_*` | Reverse Engineering, siehe unten |
 

@@ -14,6 +14,7 @@
 #include "m6510/machine.hpp"
 #include "m6510/memory.hpp"
 #include "m6510/snapshot.hpp"
+#include "m6510/video.hpp"
 
 namespace m6510 {
 
@@ -51,6 +52,7 @@ private:
 
     SessionOptions options_;
     Machine m_;
+    std::map<std::string, IndexedImage> screens_;  // named screenshots (full screen) for screen_diff
 };
 
 }  // namespace m6510

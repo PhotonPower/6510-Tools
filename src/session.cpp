@@ -215,6 +215,7 @@ struct Session::Impl {
             return ok();
         }
         if (cmd == "screen") return cmdScreen();
+        if (cmd == "screenshot" || cmd == "screens" || cmd == "screen_drop" || cmd == "screen_diff") return cmdScreenshot(cmd);
         if (cmd == "reset") return cmdReset();
         if (cmd == "symbols") {
             Json j = Json::object();
@@ -233,7 +234,7 @@ struct Session::Impl {
                               "step_over", "run", "run_until_return", "call", "run_program", "break", "unbreak", "breaks",
                               "clear_breaks", "watch", "unwatch", "checkpoint", "rollback", "drop", "checkpoints", "diff",
                               "state", "set_state", "save_state", "load_state", "interrupt", "io", "kernalcalls", "console",
-                              "keys", "screen", "reset", "symbols", "machine", "help"})
+                              "keys", "screen", "screenshot", "screens", "screen_drop", "screen_diff", "reset", "symbols", "machine", "help"})
             list.push(c);
         return ok().set("commands", list).set("docs", "docs/agent-protocol.md");
     }
@@ -671,6 +672,73 @@ struct Session::Impl {
         Json j = ok().set("lines", lines).set("mode", mode).set("screen", hex4(screen)).set("bank", hex4(m.vicBank()));
         j.set("border", m.vic(0x20) & 0x0F).set("background", m.vic(0x21) & 0x0F).set("display_on", (d011 & 0x10) != 0);
         j.set("memory", m.describeConfig());
+        return j;
+    }
+
+    Json cmdScreenshot(const std::string& cmd) {
+        if (cmd == "screens") {
+            Json l = Json::array();
+            for (const auto& [n, img] : s.screens_) l.push(Json::object().set("name", n).set("width", img.width).set("height", img.height));
+            return ok().set("screens", l);
+        }
+        if (cmd == "screen_drop") {
+            if (s.screens_.erase(text("name")) == 0) throw SessionError("no screen '" + text("name") + "'");
+            return ok();
+        }
+        needC64(cmd.c_str());
+        RenderOptions ro;
+        ro.border = flag("border", false);
+        if (has("palette") && !parsePalette(text("palette"), ro.palette)) throw SessionError("palette must be colodore or pepto");
+        const IndexedImage current = renderScreen(*s.m_.c64(), s.m_.memory(), ro);
+        if (cmd == "screen_diff") {
+            const auto a = s.screens_.find(text("a"));
+            if (a == s.screens_.end()) throw SessionError("no screen '" + text("a") + "'");
+            const IndexedImage* other = &current;
+            if (has("b")) {
+                const auto b = s.screens_.find(text("b"));
+                if (b == s.screens_.end()) throw SessionError("no screen '" + text("b") + "'");
+                other = &b->second;
+            }
+            const ImageDiff d = diffImages(a->second, *other);
+            Json j = ok().set("same_size", d.sameSize).set("changed_pixels", d.changedPixels);
+            if (d.sameSize && d.changedPixels > 0) {
+                j.set("bbox", Json::object().set("x0", d.x0).set("y0", d.y0).set("x1", d.x1).set("y1", d.y1));
+                const int off = other->width > 320 ? 32 : 0, offy = other->height > 200 ? 36 : 0;
+                auto cellX = [&](int x) { return std::clamp((x - off) / 8, 0, 39); };
+                auto cellY = [&](int y) { return std::clamp((y - offy) / 8, 0, 24); };
+                j.set("text_cells", Json::object().set("col0", cellX(d.x0)).set("row0", cellY(d.y0)).set("col1", cellX(d.x1)).set("row1", cellY(d.y1)));
+            }
+            return j;
+        }
+        const std::string name = has("name") ? text("name") : "last";
+        s.screens_[name] = current;  // the full screen is stored; crop/zoom only change what is returned
+        IndexedImage shown = current;
+        Json j = ok();
+        const int off = ro.border ? 32 : 0, offy = ro.border ? 36 : 0;
+        if (const Json* crop = arg("crop"); crop && !crop->isNull()) {
+            if (!crop->isObject()) throw SessionError("crop must be an object {col0,row0,col1,row1} (text cells)");
+            auto cell = [&](const char* key, int max) {
+                const Json* v = crop->find(key);
+                if (!v || !v->isNumber() || v->asInt() < 0 || v->asInt() > max)
+                    throw SessionError(std::string("crop needs ") + key + " (0.." + std::to_string(max) + ")");
+                return static_cast<int>(v->asInt());
+            };
+            const int col0 = cell("col0", 39), row0 = cell("row0", 24), col1 = cell("col1", 39), row1 = cell("row1", 24);
+            if (col1 < col0 || row1 < row0) throw SessionError("crop: end is before start");
+            const int px = (col1 - col0 + 1) * 8;
+            const std::int64_t zoom = number("zoom", std::clamp(320 / px, 1, 8));
+            if (zoom < 1 || zoom > 16) throw SessionError("zoom must be 1..16");
+            shown = cropAndZoom(current, off + col0 * 8, offy + row0 * 8, off + col1 * 8 + 7, offy + row1 * 8 + 7, static_cast<int>(zoom));
+            j.set("zoom", zoom);
+        } else if (has("zoom")) {
+            const std::int64_t zoom = number("zoom", 1);
+            if (zoom < 1 || zoom > 4) throw SessionError("zoom must be 1..4 for the whole screen");
+            shown = cropAndZoom(current, 0, 0, current.width - 1, current.height - 1, static_cast<int>(zoom));
+            j.set("zoom", zoom);
+        }
+        j.set("name", name).set("mode", s.m_.screenMode()).set("width", shown.width).set("height", shown.height);
+        j.set("charset", s.m_.c64()->hasChar() ? "rom" : "replacement");
+        j.set("png_base64", base64Encode(encodePng(shown)));
         return j;
     }
 
