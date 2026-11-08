@@ -447,6 +447,25 @@ table:  .FILL 20
         const ListingResult w = renderListing(m3, an3, ann, lo);
         CHECK(w.verified);
         CHECK(has(w.text, ".WORD record_0,$1234"));
+        // wrapping: long comments become comment lines of at most `wrap` characters, and the listing still verifies
+        std::string longText;
+        for (int k = 0; k < 40; ++k) longText += "Wort" + std::to_string(k) + " ";
+        ann.setComment(0xC000, longText);
+        rec.comment = longText;
+        CHECK(!ann.setData(rec));
+        ListingOptions wo = lo;
+        wo.wrap = 100;
+        const ListingResult wr = renderListing(m3, an3, ann, wo);
+        CHECK(wr.verified);
+        std::size_t longest = 0;
+        for (std::size_t pos = 0, nl; pos < wr.text.size(); pos = nl + 1) {
+            nl = wr.text.find('\n', pos);
+            if (nl == std::string::npos) nl = wr.text.size();
+            longest = std::max(longest, nl - pos);
+        }
+        CHECK(longest <= 100);
+        CHECK(has(wr.text, "Wort39"));
+        CHECK(has(wr.text, "        STA jump_vec+1"));
     }
 
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------

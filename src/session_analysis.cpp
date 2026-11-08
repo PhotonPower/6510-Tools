@@ -417,6 +417,8 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         lo.maxChars = static_cast<std::size_t>(number("max_chars", 0, 0, 100'000'000));
         lo.c64Names = m_.c64() != nullptr;
         lo.equates = flag("equates", true);
+        lo.wrap = static_cast<unsigned>(number("wrap", 0, 0, 1000));
+        if (lo.wrap > 0 && lo.wrap < 60) throw AnalysisError("wrap must be 0 (off) or at least 60");
         if (lo.from < an.from() || lo.to > an.to() || lo.to <= lo.from)
             throw AnalysisError("the range must lie inside the analysed range " + hex4(an.from()) + "-" + hex4(an.to() - 1));
         const ListingResult r = renderListing(*analysisView_, an, ann, lo);

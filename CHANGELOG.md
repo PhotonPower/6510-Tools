@@ -26,6 +26,10 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   - Listing: Chipregister, KERNAL-Einsprünge und Farb-RAM behalten ihre Namen auch innerhalb eines analysierten Bereichs bis
     `$FFFF`; vom Benutzer vergebene Namen gewinnen aber immer (Programme, die das ROM ausblenden und das RAM darunter nutzen).
     Datenbereiche der Art `bytes` werden an Variablen, Sprungzielen und Kommentaren in eigene Zeilen geteilt.
+  - Listing: Option `wrap` (lange Kommentare umbrechen); Tabellen der Art `words` zeigen die Namen benannter Ziele; Verweise in
+    benannte Datenbereiche und mehrbytige Variablen als `name+n` ohne Platzhalter-Label; keine Labels für Sprünge auf
+    Systemadressen, für Ziele nicht dargestellter Tabellen und für als Konstante markierte Immediates. Benannte Datenbereiche
+    teilen namenlose Platzhalterbereiche (z. B. „RAM unter dem KERNAL“) auf; KERNAL-Sprungtabelle schlägt überdeckende Variablen.
   - Vollständigkeitsprüfung des Orchestrators: Ausdrücke wie `COLRAM+$287` gelten nicht mehr als unbenannte Adresse.
   - Orchestrator: `--snapshot` mit `--from/--to`, `--hints` (ausgeführte Adressen), `--attach`; `analyze` mit `hints`,
     `executed` mit `addresses`; `m6510_drive.py` sperrt das Arbeitsverzeichnis je Befehl (mehrere Agenten parallel).
