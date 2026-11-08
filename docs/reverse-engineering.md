@@ -61,6 +61,9 @@ python3 agent/m6510_annotate.py --bin teil.bin --org 0xC000 --machine generic --
 | `--only` | nur diese Routine(n) |
 | `--no-auto-tables`, `--no-auto-data` | vorgeschlagene Zeigertabellen nicht verfolgen bzw. erkannte Daten nicht markieren |
 | `--lang` | Sprache der Kommentare |
+| `--snapshot` + `--from`/`--to` | einen gesicherten Maschinenzustand als Ausgangspunkt (z. B. ein laufendes Spiel nach dem Entpacken); `--from`/`--to` geben den Bereich des Programms im Speicher an |
+| `--hints datei.json` | ausgeführte Adressen (`{"cmd":"executed","addresses":true}` nach Spielläufen mit `track_execution`) als Hinweise für Code, den der Codefluss nicht erreicht |
+| `--attach` | Disketten-/Bandabbild oder Datei für `LOAD` (Programme, die nachladen) |
 
 Werkzeuge des Modells: `get_listing`, `disassemble`, `read_memory` (mit PETSCII- und Bildschirmcode-Spalte), `run_routine`
 (Register, Speicher, `setup`-Routinen, `screenshot`, `as_interrupt`), `screenshot`, `reset_machine`, `name_label`,
@@ -126,7 +129,9 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
 ## Ohne Modell: von Hand oder durch einen Agenten
 
 `agent/m6510_drive.py` (wie `m68k_drive.py`): dieselben Werkzeuge, Berichte und Prüfungen, aber ein Schritt je Aufruf, Zustand
-in einem Arbeitsverzeichnis (`init`, `status`, `show`, `tool`, `finish`, `listing`, `report`). Für einen Agenten oder einen
+in einem Arbeitsverzeichnis (`init`, `status`, `show`, `tool`, `finish`, `listing`, `report`). Jeder Befehl sperrt das
+Arbeitsverzeichnis: Mehrere Agenten können parallel an verschiedenen Routinen desselben Programms arbeiten und sehen dabei die
+Namen der anderen. Für einen Agenten oder einen
 Menschen, der die Rolle des Modells übernimmt. Anleitung: [walkthrough.md](walkthrough.md).
 
 ## Projektdateien

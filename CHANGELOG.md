@@ -23,6 +23,8 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
     Ausführung zeigt, bekommt eigene Routinen). KERNAL-Emulation: die Vektortabelle bei `$FD30` (Programme kopieren sie
     direkt), `$E544` (Bildschirm löschen) und `$E566` (Cursor nach Hause) nachgebildet. Gefunden an einem echten Spiel
     (Impossible Mission: Sprachausgabe über CIA-2-NMI, Vorspann kopiert die Vektoren aus dem ROM).
+  - Orchestrator: `--snapshot` mit `--from/--to`, `--hints` (ausgeführte Adressen), `--attach`; `analyze` mit `hints`,
+    `executed` mit `addresses`; `m6510_drive.py` sperrt das Arbeitsverzeichnis je Befehl (mehrere Agenten parallel).
   - Tests `d64`, `t64`, `crt` (selbst gebaute Images, Hunderte Mutationen), `test_unpack.py` (Packer in Python, Entpacker in
     6510-Assembler: ein-/zweistufig, über ein D64); Kreuzprüfung gegen `c1541` (VICE) als CI-Job.
 - **Meilenstein 0.5, erster Teil – der Bildschirm als Bild:** `renderScreen` (VIC-II aus dem Speicherzustand: Standard-,

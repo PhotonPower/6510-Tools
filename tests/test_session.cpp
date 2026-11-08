@@ -486,6 +486,13 @@ int main() {
         bool targetIsRoutine = false;
         for (const Json& x : r.find("routines")->items()) targetIsRoutine |= str(x, "addr") == "0xC011";
         CHECK(targetIsRoutine);
+        // the same through explicit hints (a list of addresses, e.g. saved from another session)
+        r = call(s, R"({"cmd":"executed","addresses":true})");
+        CHECK(r.find("addresses")->items().size() >= 9);
+        Json req = Json::object().set("cmd", "analyze").set("hints", *r.find("addresses"));
+        r = s.handle(req);
+        CHECK(num(r, "code_bytes") > before);
+        CHECK(!ok(call(s, R"({"cmd":"analyze","hints":"0xC011"})")));
         CHECK(!call(s, R"({"cmd":"track_execution","on":false})").find("tracking")->asBool());
     }
 

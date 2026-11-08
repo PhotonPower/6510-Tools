@@ -205,7 +205,13 @@ struct Session::Impl {
                 if (ranges.items().size() < 200) ranges.push(Json::object().set("start", hex4(ex[i])).set("last", hex4(ex[j])));
                 i = j + 1;
             }
-            return ok().set("tracking", s.m_.cpu().trackingExecution()).set("instructions", ex.size()).set("blocks", ranges);
+            Json j = ok().set("tracking", s.m_.cpu().trackingExecution()).set("instructions", ex.size()).set("blocks", ranges);
+            if (flag("addresses", false)) {
+                Json all = Json::array();
+                for (const Address a : ex) all.push(hex4(a));
+                j.set("addresses", all);
+            }
+            return j;
         }
         if (cmd == "input") return cmdInput();
         if (cmd == "run_program") return cmdRunProgram();

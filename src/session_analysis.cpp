@@ -139,6 +139,16 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         analysis_->setDataBarrier([this](Address a) { return ann_.dataCovering(a) != nullptr; });
         for (const Address e : entries) analysis_->addEntry(e);
         std::size_t hints = 0;
+        if (const Json* h = arg("hints")) {
+            if (!h->isArray()) throw AnalysisError("'hints' must be a list of addresses (instructions known to be code)");
+            for (const Json& x : h->items()) {
+                const Address a = addressOf(x, "hints");
+                if (a >= from && a < to) {
+                    analysis_->addCodeHint(a);
+                    ++hints;
+                }
+            }
+        }
         if (flag("use_executed")) {
             if (!m_.cpu().trackingExecution()) throw AnalysisError("use_executed needs track_execution (and a run) first");
             for (const Address a : m_.cpu().executedAddresses())
