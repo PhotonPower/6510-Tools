@@ -1,0 +1,4 @@
+; Comment file for the disassembler:  address,"text"
+; Addresses may be decimal, $hex or 0xhex. Commented addresses are entry points.
+$080D,"entry: print the message below"
+$080F,"fetch the next character"

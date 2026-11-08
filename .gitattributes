@@ -1,0 +1,19 @@
+# Normalise line endings for text files...
+* text=auto
+
+# Binary images: programs, disks, tapes, cartridges, ROMs, snapshots
+*.bin binary
+*.rom binary
+*.prg binary
+*.p00 binary
+*.P00 binary
+*.d64 binary
+*.d71 binary
+*.d81 binary
+*.g64 binary
+*.t64 binary
+*.tap binary
+*.crt binary
+*.vsf binary
+*.sid binary
+*.png binary
