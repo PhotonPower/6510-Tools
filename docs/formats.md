@@ -1,7 +1,7 @@
 # Dateiformate
 
-> **Stand 0.3:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen), alle
-> Ausgabeformate des Assemblers und Snapshots sind umgesetzt. T64/D64/CRT kommen mit 0.6, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
+> **Stand 0.5:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen), alle
+> Ausgabeformate des Assemblers, Snapshots, Annotationen und PNG-Screenshots sind umgesetzt. T64/D64/CRT kommen mit 0.6, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
 > zu jedem Leser ([testing.md](testing.md)).
 
 ## Kommentardatei (Disassembler, `-c`)
@@ -104,3 +104,22 @@ gespeichert; ein Snapshot passt nur zur gleichen Maschinenart (`generic` bzw. `c
 
 VICE-Snapshots (`.vsf`) zu **lesen** wäre nützlich (Programme im laufenden Zustand aus dem Emulator holen); eine Idee für
 nach 0.6.
+
+## Annotationen
+
+`ann_save`/`ann_load` (und `ann_list`) benutzen JSON im Format des MC68000-Projekts; Adressen als `"0xC000"`:
+
+```json
+{"version": 1, "title": "Spiel",
+ "labels":   [{"addr": "0x082D", "name": "print"}],
+ "routines": [{"addr": "0x082D", "name": "print", "summary": "…", "inputs": "A/Y = Adresse", "outputs": "",
+               "clobbers": "A Y", "confidence": "high"}],
+ "variables": [{"name": "ptr", "addr": "0x00FB", "size": 2, "comment": ""}],
+ "data":     [{"addr": "0x08B3", "length": 13, "kind": "text", "name": "", "comment": ""},
+              {"addr": "0x08A7", "length": 3, "kind": "lohi", "partner": "0x08AA", "minus_one": true, "name": "", "comment": ""}],
+ "comments": [{"addr": "0x0860", "text": "…"}], "block_comments": [], "constants": [{"addr": "0x080D"}]}
+```
+
+Datenarten: `bytes`, `words`, `text`, `screen`, `pointers`, `rts_pointers`, `lohi`, `sprites`, `charset`. Beim Laden gelten
+dieselben Regeln wie beim Annotieren (gültige, eindeutige Namen; Datenbereiche ohne Überlappung); eine verletzte Regel
+lehnt die ganze Datei ab.

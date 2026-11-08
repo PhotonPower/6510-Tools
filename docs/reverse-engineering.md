@@ -1,6 +1,9 @@
 # Reverse Engineering mit lokalem LLM
 
-> **Stand 0.1:** geplant (Meilenstein 0.5). Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
+> **Stand 0.5:** umgesetzt – Analyse, Sprungtabellen, Datentypen, Annotationen, verifiziertes Listing und Screenshots im
+> Server (`m6510tool serve`, [agent-protocol.md](agent-protocol.md#reverse-engineering-reverse-engineeringmd)), der
+> Orchestrator `agent/m6510_annotate.py` und `agent/m6510_drive.py` (getestet gegen einen Mock-Ollama, noch nicht mit einem
+> echten Modell erprobt). D64 als Quelle kommt mit 0.6. Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
 > `agent/m68k_annotate.py` / `agent/m68k_drive.py` (Analyse, Sprungtabellen, Datentypen, Blindtest-Befunde) der
 > Schwesterprojekte. Was sich dort bewährt hat, wird übernommen; dieses Dokument nennt die 6510-spezifischen Teile.
 
@@ -37,14 +40,32 @@ Das Modell **kann den Code nicht verändern**. Es liefert nur Namen und Texte; d
 KERNAL-Namen, doppelte Namen) werden mit Erklärung abgewiesen. Jedes Experiment läuft auf einem Checkpoint und wird
 zurückgerollt (inklusive Farb-RAM, Bausteinregistern und KERNAL-Zustand).
 
-## Benutzung (geplant)
+## Benutzung
 
 ```sh
 python3 agent/m6510_annotate.py --prg spiel.prg --project spiel.m6510proj.json --out spiel_kommentiert.asm \
-        --lang Deutsch --model qwen3-vl:8b-instruct --log spiel.log.jsonl
-python3 agent/m6510_annotate.py --d64 disk.d64 --file "SPIEL" …     # Datei aus einem Diskettenabbild
+        --lang Deutsch --model qwen3-vl:8b-instruct --log spiel.log.jsonl --report luecken.md
 python3 agent/m6510_annotate.py --prg spiel.prg --dry-run            # Analyse ohne Modell: Reihenfolge, Tabellen, Token-Schätzung
+python3 agent/m6510_annotate.py --bin teil.bin --org 0xC000 --machine generic --entry 0xC000
 ```
+
+| Option | Wirkung |
+|---|---|
+| `--prg` / `--bin` + `--org` | Programm (PRG/P00; `--org` verschiebt) bzw. Raw-Datei an eine Adresse |
+| `--machine c64\|generic` | C64 mit KERNAL-Emulation (Standard) oder 64 KiB RAM ohne I/O |
+| `--entry` | Einstiegspunkte (mehrfach); Standard: `SYS`-Adresse des BASIC-Starters, sonst die Ladeadresse |
+| `--project`, `--out`, `--report`, `--log` | Projektdatei (wird nach jeder Routine gespeichert, beim Start geladen), Listing, Lückenbericht, Protokoll |
+| `--model`, `--refine-model` (mehrfach), `--refine-all`, `--refine-medium` | Modell des ersten Durchgangs, weitere Durchgänge für Routinen mit Lücken |
+| `--think`, `--max-tokens`, `--num-ctx`, `--temperature`, `--max-turns` | Modellparameter wie bei den Schwesterprojekten |
+| `--only` | nur diese Routine(n) |
+| `--no-auto-tables`, `--no-auto-data` | vorgeschlagene Zeigertabellen nicht verfolgen bzw. erkannte Daten nicht markieren |
+| `--lang` | Sprache der Kommentare |
+
+Werkzeuge des Modells: `get_listing`, `disassemble`, `read_memory` (mit PETSCII- und Bildschirmcode-Spalte), `run_routine`
+(Register, Speicher, `setup`-Routinen, `screenshot`, `as_interrupt`), `screenshot`, `reset_machine`, `name_label`,
+`document_routine`, `name_variable`, `mark_data` (alle Datenarten inklusive `lohi` mit `partner`), `add_comment`,
+`mark_constant`, `remove_annotation`, `finish_routine`. Ein Modell ohne Bildverständnis (Ollama meldet keine Fähigkeit
+`vision`) bekommt statt der Bilder den Bildschirm als Text.
 
 Wie bei den Schwesterprojekten: Routinen **von den Blättern zur Wurzel**, mehrere Durchgänge (schnelles Modell zuerst,
 gründliches für die Lücken), Projektdatei zum Abbrechen/Fortsetzen, Bericht am Ende, Standardmodell
@@ -65,11 +86,18 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
   bekannter Einsprünge vorhanden ist.
 - **I/O-Zugriffe** je Routine: welche VIC-/SID-/CIA-Register gelesen und geschrieben werden (starker Hinweis auf den Zweck:
   `$D020` Rahmenfarbe, `$D418` Lautstärke, `$DC01` Tastatur …).
-- **Zero Page:** benutzte Adressen, Zeigerpaare (`($FB),Y` → `$FB/$FC` als 16-Bit-Zeiger), Vorschläge für Namen.
+- **Zero Page:** benutzte Adressen je Routine, Zeigerpaare (`($FB),Y` → `$FB/$FC`); mit `ann_variable … size:2` heißen
+  die Zugriffe `ptr` und `ptr+1`.
+- **Zeiger als Immediate-Paare:** `LDA #<text / LDY #>text` (Registerpaar A/Y bzw. X/Y wie bei den KERNAL-Aufrufen) und
+  `LDA #<x / STA z / LDA #>x / STA z+1` werden erkannt, wenn das Ziel im Programm liegt; das Listing schreibt `#<name` /
+  `#>name`, solange der Befehl nicht mit `ann_constant` als reine Zahl markiert ist.
+- **Interrupt-Handler:** ein so eingetragener Zeiger in `$0314` (IRQ), `$0316` (BRK), `$0318` (NMI), `$FFFE` oder `$FFFA`
+  macht das Ziel zu einem Einstiegspunkt.
 - **Selbstmodifizierender Code:** Befehle, deren Operand von anderem Code geschrieben wird (`STA patch+1`), werden markiert;
-  das Listing schreibt `patch+1` und kommentiert die Stelle. Die Analyse folgt `JMP`/`JSR` mit veränderbarem Ziel nicht blind.
-- **Banking:** Schreibt das Programm `$01`, wird das gemeldet (z. B. „schaltet BASIC und KERNAL aus: `$35`“); Code unter ROM
-  wird in der RAM-Sicht analysiert.
+  das Listing schreibt `patch+1` und kommentiert die Stelle („self-modifying: written by $xxxx“). Das Ziel eines solchen
+  Befehls ist das, was im Speicher steht – die Analyse kann den späteren Wert nicht kennen.
+- **Banking:** Schreibt das Programm `$01`, wird das je Routine gemeldet (`port_writes` mit dem Wert, wenn er direkt davor
+  geladen wird); Code unter ROM wird in der RAM-Sicht analysiert.
 
 ## Sprungtabellen
 
@@ -86,12 +114,13 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
 |---|---|
 | `text` (PETSCII) | druckbare PETSCII-Zeichen, mit `0`, `$0D` oder gesetztem Bit 7 am Ende; über `CHROUT`-Schleifen referenziert |
 | `screen` (Bildschirmcodes) | Bytes, die in den Bildschirmspeicher kopiert werden; Listing als `.SCREEN "…"` |
-| `lohi`, `pointers`, `words`, `bytes` | Zugriffsmuster (`LDA tab,X` mit gleichem Index auf zwei Tabellen, …) |
-| `sprites` | 63-Byte-Blöcke an 64-Byte-Grenzen, auf die Sprite-Zeiger (`$07F8–$07FF` bzw. Bildschirm + `$3F8`) zeigen; Listing mit Bitmuster-Kommentar |
-| `charset` | 2-KiB-Bereich, auf den `$D018` zeigt |
-| `bitmap`, `colors` | 8000 Byte Bitmap / 1000 Byte Farben im Bitmap-Modus |
-| `basic` | BASIC-Programm am Anfang (detokenisiert als Kommentar, `.BASIC` für einen reinen Starter) |
-| `zeros` | Nullbereiche → `.FILL` |
+| `words`, `pointers` | Tabelle, auf die mit `LDA tab,X` und `LDA tab+1,X` zugegriffen wird; `pointers`, wenn jeder Eintrag auf einen Befehl zeigt |
+| `lohi`, `rts_pointers` | aus den Sprungtabellen (oder von Hand annotiert); Listing als `.LO`/`.HI` bzw. `.WORD ziel-1` |
+| `sprites` | 64-Byte-Block, auf den ein Sprite-Zeiger (`LDA #n / STA $07F8–$07FF`) zeigt; Listing mit Bitmuster-Kommentar |
+| `charset` | Bereich, auf den `LDA #n / STA $D018` zeigt (außer dem Zeichensatz-ROM bei `$1000/$1800`); Listing 8 Byte je Zeichen |
+| `basic` | BASIC-Programm bei `$0801`; ein reiner Starter wird `.BASIC zeile,ziel` |
+| `zeros` | Nullbereiche ab 8 Byte (das Listing schreibt ab 16 Byte `.FILL`) |
+| `bitmap`, `colors` | 8000 Byte Bitmap / 1000 Byte Farben im Bitmap-Modus – Idee |
 
 ## Ohne Modell: von Hand oder durch einen Agenten
 

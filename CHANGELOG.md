@@ -7,6 +7,28 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Meilenstein 0.5, erster Teil – der Bildschirm als Bild:** `renderScreen` (VIC-II aus dem Speicherzustand: Standard-,
+  Multicolor- und Extended-Background-Text, Hires- und Multicolor-Bitmap, Rahmen, Bild aus, 38 Spalten/24 Zeilen,
+  Feinscrolling, VIC-Bank, Zeichensatz-ROM in Bank 0/2), selbst gezeichneter **Ersatzzeichensatz** (`tools/make_font.py`),
+  Paletten **Colodore** (Standard) und Pepto, PNG-Encoder und Base64 aus dem Z80-Projekt. Protokollbefehle `screenshot`
+  (Ausschnitt in Textzellen, Zoom), `screens`, `screen_drop`, `screen_diff`; Monitor `shot`. Test `video`.
+  Offene Frage 3 (Palette) entschieden.
+- **Meilenstein 0.5, zweiter Teil – Analyse und verifiziertes Listing:** `Analysis` (Codefluss, Routinen mit Aufrufgraph und
+  Tiefe, KERNAL-Aufrufe, I/O-Zugriffe, Zero Page, `$01`-Schreibzugriffe, Sprungtabellen `vector`/`rts`/`lohi`/`pointers`,
+  Zeiger in Immediate-Paaren, Interrupt-Handler aus `$0314`/`$0318`/…, selbstmodifizierender Code, Datentypen Text/
+  Bildschirmcodes/Nullen/Wort- und Zeigertabellen/Sprites/Zeichensatz/BASIC), `Annotations` (Namensregeln, JSON),
+  `renderListing` (neu assembliert und Byte für Byte verglichen). Protokollbefehle `analyze`, `routines`, `references`,
+  `jump_tables`, `data_regions`, `listing`, `ann_*`. Beispielprogramm `examples/c64/hello_c64.asm`. Tests `reverse`,
+  `jumptable`, `datatypes` (Zufallsprogramme mit Zufallsannotationen: jedes Listing verifiziert).
+  - `m6510::Machine` merkt sich den Bereich des zuletzt geladenen oder assemblierten Programms.
+- **Meilenstein 0.5, dritter Teil – Orchestrator:** `agent/m6510_annotate.py` (Ollama, Routinen von den Blättern zur Wurzel,
+  Werkzeuge mit `run_routine` samt KERNAL-Aufrufen, Bausteinzugriffen, `CHROUT`-Text, Bildschirmänderung und Screenshots für
+  Modelle mit Bildverständnis, Vollständigkeitsprüfung, Verfeinerungsdurchgänge, Projektdatei, Bericht, `--dry-run`) und
+  `agent/m6510_drive.py` (dieselben Werkzeuge, ein Schritt je Aufruf). Tests gegen einen Mock-Ollama (`tests/agent`, CTest
+  `agent`). Anleitung `docs/walkthrough.md` mit dem Beispielprogramm.
+  - `call` mit `frame` (`irq`, `rti`): Interrupt-Handler laufen mit dem passenden Stapelrahmen und kehren mit `RTI` zurück
+    (`Cpu::callInterrupt`).
+  - Listing-Option `equates:false` (kein Kopf, für Ausschnitte); `max_entries:0` bei `jump_tables`.
 - **Meilenstein 0.4 – Monitor** (`m6510::Monitor`, `m6510tool monitor`): klassische Eingabeschleife wie bei den
   Schwesterprojekten, Zahlen hexadezimal (`100.` dezimal, Präfixe, Symbole, `@`-Register): `d`, `m`/`m.s`, `e`/`e.w`, `f`,
   `c`, `t`, `h`, Assemble-Modus `a` (Labels, Zuweisungen, Direktiven), `r`, `n`, `o`, `u`, `g`, `ru`, `b`/`bc`/`w`, `limit`,
@@ -79,5 +101,21 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   Entscheidungsvorschlägen und offenen Fragen).
 
 ### Behoben
+- **Befunde aus dem Blindtest** (ein Claude-Agent übernahm mit `m6510_drive.py` die Rolle des Modells, nur mit dem PRG;
+  Ergebnis: alle 10 Routinen dokumentiert, Listing verifiziert, rund 115 Werkzeugaufrufe):
+  - Listing-Ausschnitte benennen Adressen im analysierten Programm jetzt genauso wie das ganze Listing (vorher `#$B3` statt
+    `#<data_08B3` und rohe Adressen, sobald das Ziel außerhalb des Ausschnitts lag; ein Modell hätte echte Zeiger als
+    Konstanten markiert).
+  - Kommentare an Datenzeilen und die Kommentare von `ann_variable` erscheinen im Listing (vorher stillschweigend verloren);
+    eine benannte Variable und ein einzeln benutztes Byte bekommen eine eigene Zeile statt in `.FILL` aufzugehen;
+    `ann_comment` mitten in einem Datenbereich oder einer Sprungtabelle wird mit Erklärung abgelehnt.
+  - Mit `addresses:true` steht die Adresse immer vorn im Kommentar (`; $0860: Text`); „operand changed by the code at …“
+    statt des missverständlichen „written by … / $0860“.
+  - Annotierte Sprungtabellen bleiben mit ihrem `RTS`/`JMP` verknüpft (vorher verloren die Verteiler ihre Aufgerufenen).
+  - `references` beschreibt Sprungtabellen, KERNAL-ROM-Adressen (`$EA31`), RAM-Vektoren (`CINV` & Co., jetzt auch als Namen
+    im Listing) und Sprite-Zeiger; `ann_constant` meldet, wenn die Markierung nichts bewirkt.
+  - Orchestrator: `get_listing` mit inklusivem Ende; der Auftrag nennt die benutzten Sprungtabellen und bei jedem Fall
+    Tabelle und Index; `run_routine` meldet Sprites und erklärt das doppelte Schreiben von `INC $D019`; die
+    Vollständigkeitsprüfung meldet unbenannte `data_`-Operanden; `m6510_drive.py` speichert Screenshots als PNG.
 - `set` mit `P` (Sitzung) und `r p=…` (Monitor): Ein neues `I`-Flag galt für die Interrupt-Abfrage erst nach einem weiteren
   Befehl, als wäre es mit `CLI`/`SEI` gesetzt worden.

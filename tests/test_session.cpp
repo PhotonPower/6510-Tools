@@ -261,11 +261,16 @@ int main() {
         const char* cmds[] = {"asm", "dis", "read", "write", "regs", "set", "step", "step_over", "run", "run_until_return",
                               "call", "break", "unbreak", "breaks", "watch", "unwatch", "checkpoint", "rollback", "diff",
                               "state", "set_state", "interrupt", "reset", "symbols", "machine", "io", "kernalcalls",
-                              "console", "keys", "screen", "run_program", "help"};
+                              "console", "keys", "screen", "screenshot", "screens", "screen_diff", "screen_drop", "run_program", "help",
+                              "analyze", "routines", "references", "listing", "jump_tables", "data_regions", "ann_label",
+                              "ann_routine", "ann_variable", "ann_data", "ann_comment", "ann_constant", "ann_remove", "ann_title",
+                              "ann_list"};
         const char* values[] = {"0", "1", "-5", "\"0xC000\"", "\"$FFFF\"", "\"loop\"", "true", "null", "[]", "{}",
                                 "\"A\"", "\"c64\"", "\"generic\"", "70000", "\"\"", "\"LDA #1\\n BRK\""};
         const char* keys[] = {"addr", "len", "n", "source", "hex", "regs", "name", "type", "kind", "text", "max_instructions",
-                              "count", "until", "memory", "state", "entry", "origin"};
+                              "count", "until", "memory", "state", "entry", "origin", "crop", "zoom", "border", "a", "b", "palette",
+                              "from", "to", "entries", "linear", "apply", "order", "kind", "length", "partner", "title", "size",
+                              "block", "max_chars", "verify"};
         for (int i = 0; i < 3000; ++i) {
             std::string line = std::string("{\"cmd\":\"") + cmds[rng() % (sizeof(cmds) / sizeof(*cmds))] + "\"";
             const int nargs = static_cast<int>(rng() % 4);
@@ -290,6 +295,167 @@ int main() {
         const Json r = call(s, R"({"cmd":"step"})");
         CHECK_EQ(str(r, "pc"), std::string("0xC000"));
         CHECK_EQ(num(r, "interrupts"), 1);
+    }
+
+    // screenshots
+    {
+        Session s;
+        CHECK(!ok(call(s, R"({"cmd":"screenshot"})")));  // generic machine
+        call(s, R"({"cmd":"machine","type":"c64"})");
+        Json r = call(s, R"({"cmd":"screenshot"})");
+        CHECK(ok(r));
+        CHECK_EQ(num(r, "width"), 320);
+        CHECK_EQ(num(r, "height"), 200);
+        CHECK_EQ(str(r, "name"), std::string("last"));
+        CHECK_EQ(str(r, "mode"), std::string("text"));
+        CHECK_EQ(str(r, "charset"), std::string("replacement"));
+        CHECK_EQ(str(r, "png_base64").substr(0, 8), std::string("iVBORw0K"));  // PNG signature
+        r = call(s, R"({"cmd":"screenshot","name":"before","border":true,"palette":"pepto"})");
+        CHECK_EQ(num(r, "width"), 384);
+        r = call(s, R"({"cmd":"screenshot","crop":{"col0":0,"row0":0,"col1":3,"row1":1}})");
+        CHECK_EQ(num(r, "width"), 32 * 8);  // 4 cells = 32 px, zoom 320/32 -> 8 (at most)
+        CHECK_EQ(num(r, "zoom"), 8);
+        r = call(s, R"({"cmd":"screenshot","crop":{"col0":0,"row0":0,"col1":39,"row1":24},"zoom":2})");
+        CHECK_EQ(num(r, "width"), 640);
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","crop":{"col0":5,"row0":0,"col1":3,"row1":1}})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","crop":{"col0":0,"row0":0,"col1":40,"row1":1}})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","crop":[1,2]})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","zoom":9})")));
+        CHECK(!ok(call(s, R"({"cmd":"screenshot","palette":"vice"})")));
+        call(s, R"({"cmd":"screenshot","name":"a"})");
+        r = call(s, R"({"cmd":"screens"})");
+        CHECK_EQ(r.find("screens")->items().size(), std::size_t{3});  // last, before, a
+        r = call(s, R"({"cmd":"screen_diff","a":"a"})");
+        CHECK_EQ(num(r, "changed_pixels"), 0);
+        call(s, R"({"cmd":"write","addr":"0x0400","hex":"A0"})");  // reversed space in the top left cell
+        call(s, R"({"cmd":"write","addr":"0xD800","hex":"01"})");
+        r = call(s, R"({"cmd":"screen_diff","a":"a"})");
+        CHECK_EQ(num(r, "changed_pixels"), 64);
+        CHECK_EQ(num(*r.find("text_cells"), "col1"), 0);
+        CHECK_EQ(num(*r.find("bbox"), "x1"), 7);
+        r = call(s, R"({"cmd":"screen_diff","a":"a","b":"before"})");
+        CHECK(!r.find("same_size")->asBool());  // 320 x 200 against 384 x 272
+        CHECK(!ok(call(s, R"({"cmd":"screen_diff","a":"nosuch"})")));
+        CHECK(ok(call(s, R"({"cmd":"screen_drop","name":"a"})")));
+        CHECK(!ok(call(s, R"({"cmd":"screen_drop","name":"a"})")));
+    }
+
+    // reverse engineering: analyze, routines, tables, data, references, annotations, listing
+    {
+        Session s;
+        CHECK(!ok(call(s, R"({"cmd":"analyze"})")));  // nothing loaded
+        CHECK(!ok(call(s, R"({"cmd":"listing"})")));  // no analysis
+        call(s, R"({"cmd":"machine","type":"c64"})");
+        const char* src = R"({"cmd":"asm","origin":"0xC000","source":"start: LDA #<msg\n LDY #>msg\n JSR print\n LDX #1\n JSR dispatch\n RTS\nprint: STA $FB\n STY $FC\n LDY #0\nl: LDA ($FB),Y\n BEQ d\n JSR CHROUT\n INY\n BNE l\nd: RTS\ndispatch: LDA hi,X\n PHA\n LDA lo,X\n PHA\n RTS\nc0: INC $D020\n RTS\nc1: STA patch+1\npatch: LDA #0\n RTS\nlo: .LO c0-1, c1-1\nhi: .HI c0-1, c1-1\nmsg: .BYTE \"HELLO\", 0","entry":"start"})";
+        CHECK(ok(call(s, src)));
+        Json r = call(s, R"({"cmd":"analyze"})");
+        CHECK(ok(r));
+        CHECK_EQ(str(r, "from"), std::string("0xC000"));
+        CHECK_EQ(num(r, "routines"), 5);
+        CHECK_EQ(num(r, "jump_tables"), 1);
+        r = call(s, R"({"cmd":"jump_tables"})");
+        const Json& t = r.find("tables")->items()[0];
+        CHECK_EQ(str(t, "kind"), std::string("rts"));
+        CHECK(t.find("minus_one")->asBool());
+        CHECK_EQ(num(t, "entry_count"), 2);
+        r = call(s, R"({"cmd":"routines","order":"address"})");
+        const auto& rs = r.find("routines")->items();
+        CHECK_EQ(rs.size(), std::size_t{5});
+        bool foundChrout = false, foundIo = false;
+        for (const Json& x : rs) {
+            for (const Json& k : x.find("kernal_calls")->items()) foundChrout |= str(k, "name") == "CHROUT";
+            for (const Json& w : x.find("io_access")->find("writes")->items()) foundIo |= str(w, "name") == "EXTCOL";
+        }
+        CHECK(foundChrout);
+        CHECK(foundIo);
+        CHECK(!ok(call(s, R"({"cmd":"routines","order":"random"})")));
+        r = call(s, R"({"cmd":"data_regions","apply":true})");
+        CHECK_EQ(num(r, "applied"), 1);
+        CHECK_EQ(str(r.find("regions")->items()[0], "kind"), std::string("text"));
+        r = call(s, R"({"cmd":"references","from":"start","to":"print"})");
+        bool textRef = false;
+        for (const Json& x : r.find("references")->items()) textRef |= str(x, "kind") == "text" && str(x, "preview") == "HELLO";
+        CHECK(textRef);
+        r = call(s, R"({"cmd":"references","from":"c1","to":"lo"})");
+        bool selfmod = false;
+        for (const Json& x : r.find("references")->items()) selfmod |= str(x, "kind") == "selfmod";
+        CHECK(selfmod);
+        // annotations
+        CHECK(ok(call(s, R"({"cmd":"ann_label","addr":"print","name":"print_string"})")));
+        CHECK(!ok(call(s, R"({"cmd":"ann_label","addr":"start","name":"print_string"})")));  // duplicate
+        CHECK(!ok(call(s, R"({"cmd":"ann_label","addr":"start","name":"INY"})")));
+        CHECK(ok(call(s, R"({"cmd":"ann_routine","addr":"print","summary":"prints a string","inputs":"A/Y = address","confidence":"high"})")));
+        CHECK(!ok(call(s, R"({"cmd":"ann_routine","addr":"print","confidence":"sure"})")));
+        CHECK(ok(call(s, R"({"cmd":"ann_variable","addr":"0xFB","name":"text_ptr","size":2})")));
+        CHECK(ok(call(s, R"({"cmd":"ann_comment","addr":"start","text":"entry"})")));
+        CHECK(!ok(call(s, R"({"cmd":"ann_comment","addr":"0xC001","text":"inside"})")));  // operand byte
+        CHECK(!ok(call(s, R"({"cmd":"ann_data","addr":"start","length":2})")));          // code
+        CHECK(!ok(call(s, R"({"cmd":"ann_data","addr":"msg","length":2,"kind":"floats"})")));
+        CHECK(!ok(call(s, R"({"cmd":"ann_constant","addr":"0xC001"})")));
+        CHECK(ok(call(s, R"({"cmd":"ann_constant","addr":"start"})")));
+        CHECK(ok(call(s, R"({"cmd":"ann_title","title":"session test"})")));
+        r = call(s, R"({"cmd":"listing","addresses":true})");
+        CHECK(r.find("verified")->asBool());
+        const std::string text = str(r, "listing");
+        CHECK(text.find("; session test") != std::string::npos);
+        CHECK(text.find("print_string:") != std::string::npos);
+        CHECK(text.find("STA text_ptr") != std::string::npos);
+        CHECK(text.find("LDA #$") != std::string::npos);  // constant: no #<msg
+        CHECK(text.find("LDY #>data_") != std::string::npos);
+        CHECK(text.find(".BYTE \"HELLO\",$00") != std::string::npos);
+        CHECK_EQ(num(r, "user_comments"), 1);
+        r = call(s, R"({"cmd":"listing","max_chars":100})");
+        CHECK(r.find("truncated")->asBool());
+        CHECK(!ok(call(s, R"({"cmd":"listing","from":"0xB000","to":"0xC010"})")));
+        r = call(s, R"({"cmd":"routines","undocumented_only":true})");
+        CHECK_EQ(r.find("routines")->items().size(), std::size_t{4});
+        r = call(s, R"({"cmd":"ann_list"})");
+        CHECK_EQ(str(*r.find("annotations"), "title"), std::string("session test"));
+        CHECK(ok(call(s, R"({"cmd":"ann_remove","addr":"print"})")));
+        CHECK(!call(s, R"({"cmd":"ann_remove","addr":"print"})").find("removed")->asBool());
+        CHECK(!ok(call(s, R"({"cmd":"ann_save","file":"x.json"})")));  // no file access
+        // analyze with explicit entries and a linear range
+        r = call(s, R"({"cmd":"analyze","reset":true,"entries":["c0"],"linear":{"from":"start","to":"print"}})");
+        CHECK(ok(r));
+        CHECK(!r.find("default_entry"));
+        CHECK(!ok(call(s, R"({"cmd":"analyze","from":"0xC010","to":"0xC000"})")));
+        CHECK(!ok(call(s, R"({"cmd":"analyze","entries":"start"})")));
+        // a machine change clears the analysis and the annotations
+        call(s, R"({"cmd":"machine","type":"generic"})");
+        CHECK(!ok(call(s, R"({"cmd":"routines"})")));
+        CHECK_EQ(call(s, R"({"cmd":"ann_list"})").find("annotations")->find("labels")->items().size(), std::size_t{0});
+    }
+    // annotation files
+    {
+        SessionOptions so;
+        so.allowFiles = true;
+        Session s(so);
+        call(s, R"({"cmd":"asm","origin":"0x1000","source":"main: RTS"})");
+        call(s, R"({"cmd":"ann_label","addr":"0x1000","name":"entry_point"})");
+        CHECK(ok(call(s, R"({"cmd":"ann_save","file":"m6510_session_test.ann.json"})")));
+        call(s, R"({"cmd":"ann_remove","addr":"0x1000"})");
+        const Json r = call(s, R"({"cmd":"ann_load","file":"m6510_session_test.ann.json"})");
+        CHECK_EQ(num(r, "labels"), 1);
+        writeTextFile("m6510_session_test.ann.json", R"({"labels":[{"addr":"0x1000","name":"RTS"}]})");
+        CHECK(!ok(call(s, R"({"cmd":"ann_load","file":"m6510_session_test.ann.json"})")));
+        writeTextFile("m6510_session_test.ann.json", "{not json");
+        CHECK(!ok(call(s, R"({"cmd":"ann_load","file":"m6510_session_test.ann.json"})")));
+        std::remove("m6510_session_test.ann.json");
+    }
+
+    // call with an interrupt frame: RTI returns to the return address
+    {
+        Session s;
+        call(s, R"({"cmd":"asm","origin":"0xC000","source":"rti_h: INC $10\n RTI\nirq_h: INC $10\n PLA\n TAY\n PLA\n TAX\n PLA\n RTI"})");
+        Json r = call(s, R"({"cmd":"call","addr":"rti_h","frame":"rti"})");
+        CHECK(r.find("returned")->asBool());
+        r = call(s, R"({"cmd":"call","addr":"irq_h","frame":"irq","regs":{"A":1,"X":2,"Y":3}})");
+        CHECK(r.find("returned")->asBool());
+        CHECK_EQ(str(*r.find("regs"), "X"), std::string("0x02"));
+        CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0x10","len":1})"), "hex"), std::string("02"));
+        r = call(s, R"({"cmd":"call","addr":"rti_h"})");  // as a subroutine: RTI pulls the wrong things
+        CHECK(!r.find("returned")->asBool());
+        CHECK(!ok(call(s, R"({"cmd":"call","addr":"rti_h","frame":"nmi"})")));
     }
 
     return finish("session");

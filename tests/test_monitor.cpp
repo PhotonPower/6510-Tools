@@ -379,7 +379,17 @@ int main() {
         CHECK(has(m.execute("io"), "BGCOL0"));
         m.execute("e 0801 0 0");
         CHECK(isError(m.execute("run")));
-        CHECK(isError(m.execute("shot x.png")));  // planned
+        const std::string png = tempFile("m6510_monitor_test.png");
+        CHECK(has(m.execute("shot " + png), "ok: 320 x 200 pixels, text, replacement character set"));
+        CHECK_EQ(hexBytes(readBinaryFile(png)).substr(0, 11), std::string("89 50 4E 47"));
+        CHECK(has(m.execute("shot " + png + " 0 0 2 1"), "ok: 128 x 64 pixels"));  // 2 x 1 cells, zoom 320/16 -> 8
+        CHECK(has(m.execute("shot " + png + " 0 0 28 19 1 border"), "ok: 320 x 200"));
+        CHECK(has(m.execute("shot " + png + " border pepto"), "ok: 384 x 272"));
+        CHECK(has(m.execute("shot " + png + " 2"), "ok: 640 x 400"));
+        CHECK(isError(m.execute("shot " + png + " 0 0 29 1")));  // wider than 40 cells
+        CHECK(isError(m.execute("shot " + png + " 0 0")));
+        CHECK(isError(m.execute("shot")));
+        std::remove(png.c_str());
         // without the KERNAL emulation
         CHECK(has(m.execute("machine c64 rom"), "KERNAL missing"));
         CHECK(isError(m.execute("kernal")));

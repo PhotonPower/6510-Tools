@@ -664,6 +664,27 @@ RunResult Cpu::call(Address entry, Address returnAddress, std::uint64_t maxInstr
     return res;
 }
 
+RunResult Cpu::callInterrupt(Address entry, Address returnAddress, bool kernalFrame, std::uint64_t maxInstructions) {
+    const Byte s0 = r_.s;
+    push(static_cast<Byte>(returnAddress >> 8));
+    push(static_cast<Byte>(returnAddress));
+    push(static_cast<Byte>((r_.p | kFlagU) & ~kFlagB));
+    if (kernalFrame) {
+        push(r_.a);
+        push(r_.x);
+        push(r_.y);
+    }
+    r_.pc = entry;
+    halted_ = false;
+    ++depth_;
+    RunResult res = runLoop(maxInstructions, returnAddress, false);
+    if (res.reason == StopReason::Reached) {
+        if (r_.s == s0) res.reason = StopReason::Returned;
+        else --depth_;
+    }
+    return res;
+}
+
 CpuState Cpu::state() const {
     CpuState s;
     s.regs = r_;

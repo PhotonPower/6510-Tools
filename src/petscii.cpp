@@ -200,4 +200,14 @@ std::optional<Address> findSysTarget(const Memory& memory, Address start) {
     return static_cast<Address>(target);
 }
 
+char screenCodeToChar(Byte code) {
+    const auto sc = static_cast<Byte>(code & 0x7F);
+    if (sc == 0) return '@';
+    if (sc <= 26) return static_cast<char>('A' + sc - 1);
+    if (sc == 27) return '[';
+    if (sc == 29) return ']';
+    if (sc >= 32 && sc < 64) return static_cast<char>(sc);
+    return '.';
+}
+
 }  // namespace m6510

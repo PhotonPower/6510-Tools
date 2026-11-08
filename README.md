@@ -11,16 +11,19 @@ lokalen LLM-Agenten, der Programme analysiert und kommentiert.
 
 > **Zielplattform:** Commodore **64** (MOS 6510, PAL) – siehe [docs/c64.md](docs/c64.md).
 
-> **Status: Meilenstein 0.4.** Assembler und Disassembler (0.2), Emulator, C64-Maschine mit KERNAL-Emulation,
-> Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3) sowie der Monitor (0.4) sind fertig und geprüft:
-> exhaustiver Roundtrip Dekoder/Assembler, Kreuzprüfung gegen ca65/da65, **alle 2,44 Millionen Einzelbefehls-Tests von Tom
-> Harte ohne Abweichung** und Klaus Dormanns Funktionstest in der CI. Reverse Engineering (0.5) und Disk-Images (0.6) folgen
+> **Status: Meilenstein 0.5.** Assembler und Disassembler (0.2), Emulator, C64-Maschine mit KERNAL-Emulation,
+> Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3), der Monitor (0.4) sowie Bildschirm als Bild, Analyse,
+> verifiziertes Listing und der Orchestrator für ein lokales Modell (0.5) sind fertig und geprüft: exhaustiver Roundtrip
+> Dekoder/Assembler, Kreuzprüfung gegen ca65/da65, **alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte ohne Abweichung**,
+> Klaus Dormanns Funktionstest und Tausende zufälliger Listings, die sich alle neu assemblieren lassen. Disk-Images und
+> Entpacken (0.6) folgen
 > ([Roadmap](docs/roadmap.md)). Die Dokumente unter `docs/` sagen jeweils oben, was davon schon umgesetzt ist.
 
 ## Umfang
 
 Derselbe Umfang wie bei den Schwesterprojekten, übertragen auf den 6510 und den C64. **Fertig** sind Assembler,
-Disassembler, Emulator, C64-Maschine und Agenten-Schnittstelle (Meilensteine 0.2 und 0.3); der Rest ist geplant:
+Disassembler, Emulator, C64-Maschine, Agenten-Schnittstelle, Monitor und Reverse Engineering (Meilensteine 0.2 bis 0.5);
+Images und Entpacken sind geplant:
 
 **Assembler** (`m6510tool asm`, [docs/assembler-syntax.md](docs/assembler-syntax.md)) – *fertig*
 - alle 151 dokumentierten Opcodes (56 Befehle, 13 Adressierungsarten), auf Wunsch auch die **undokumentierten** des NMOS-6510
@@ -33,8 +36,8 @@ Disassembler, Emulator, C64-Maschine und Agenten-Schnittstelle (Meilensteine 0.2
 
 **Disassembler** (`m6510tool dis`, [docs/usage.md](docs/usage.md)) – *fertig bis auf D64/T64/CRT und I/O-Namen*
 - Ablaufanalyse: folgt `JSR`, `JMP` und Verzweigungen ab den Einstiegspunkten (Standard: die `SYS`-Adresse des
-  BASIC-Starters) und trennt Code von Daten; alternativ linearer Durchlauf. Geplant (0.5): `JMP (…)`-Vektoren,
-  `RTS`-Sprungtabellen
+  BASIC-Starters) und trennt Code von Daten; alternativ linearer Durchlauf. Sprungtabellen (`JMP (…)`, `RTS`-Trick) erkennt die
+  Analyse des Reverse Engineering
 - Labels, Querverweise, Kommentardatei (`Adresse,"Text"`), Symboldateien (auch VICE-Labels), KERNAL-Einsprünge als Namen
   (`JSR CHROUT`; I/O-Register wie `STA EXTCOL` geplant), **selbstmodifizierender Code** als `label+1`
 - Ausgabe als lesbares Listing **oder** als wieder assemblierbarer Quelltext (`--asm`, byte-genau)
@@ -50,22 +53,23 @@ Disassembler, Emulator, C64-Maschine und Agenten-Schnittstelle (Meilensteine 0.2
 - **geprüft** gegen Tom Hartes Einzelbefehls-Tests (2 440 000 Fälle: Register, Speicher, Zyklen; 0 Abweichungen) und Klaus
   Dormanns Funktionstest, beide in der CI ([docs/testing.md](docs/testing.md))
 
-**Commodore 64** ([docs/c64.md](docs/c64.md)) – *fertig bis auf Bildschirmbild und Images*
+**Commodore 64** ([docs/c64.md](docs/c64.md)) – *fertig bis auf Images*
 - Speicherkarte mit allen Konfigurationen von `$01` (BASIC/KERNAL/Zeichensatz-ROM, I/O), Farb-RAM, VIC-II/SID/CIA-Register als
   Speicher mit **Schreibprotokoll** und Registernamen; Rasterzeile und CIA-1-Timer A aus dem Zyklenzähler (Raster- und
   Timer-IRQs)
 - **KERNAL-Emulation** ohne ROM: echte Sprungtabelle über die RAM-Vektoren, `CHROUT` auf Konsole und Bildschirm, `GETIN`,
   `PLOT`, `LOAD`/`SAVE`, Jiffy-Uhr über den IRQ, …; alles andere wird protokolliert. Echte ROMs (eigene Kopie, nie im
   Repository) lassen sich laden
-- geplant: **Bildschirm als Bild** (Textmodi, Bitmap, Multicolor, später Sprites) für ein Modell, das Bilder versteht (0.5);
-  T64, D64, CRT (0.6). Fertig: PRG, P00, eigenes Snapshot-Format
+- **Bildschirm als Bild** (alle Text- und Bitmap-Modi, Rahmen, Scrolling, VIC-Bank; selbst gezeichneter Ersatzzeichensatz ohne
+  ROM; Paletten Colodore/Pepto) als PNG für ein Modell, das Bilder versteht; Sprites sind eine Idee
+- geplant: T64, D64, CRT (0.6). Fertig: PRG, P00, eigenes Snapshot-Format
 
-**Agenten-Schnittstelle** (`m6510tool serve`, [docs/agent-protocol.md](docs/agent-protocol.md)) – *fertig bis auf Analyse und Screenshots*
+**Agenten-Schnittstelle** (`m6510tool serve`, [docs/agent-protocol.md](docs/agent-protocol.md)) – *fertig*
 - JSON-Zeilenprotokoll mit denselben Befehlsnamen wie `z80tool serve` und `m68ktool serve`: assemblieren, disassemblieren,
   Speicher, Register, Lauf/`call`, Breakpoints, Watchpoints, Checkpoints mit Rollback und Speicher-Diff, Snapshots,
   KERNAL-Aufrufe, I/O-Protokoll, Screenshots; Dateizugriff nur mit `--allow-files`
 
-**Reverse Engineering** ([docs/reverse-engineering.md](docs/reverse-engineering.md))
+**Reverse Engineering** ([docs/reverse-engineering.md](docs/reverse-engineering.md)) – *fertig bis auf das Entpacken*
 - Codefluss-Analyse mit Routinen und Aufrufgraph, Sprungtabellen (auch der `RTS`-Trick und getrennte Low-/High-Byte-Tabellen),
   Datentypen (PETSCII, Bildschirmcodes, Sprites, Zeichensätze), Annotationen und ein **verifiziertes Listing**: aus den echten
   Bytes erzeugt, neu assembliert und Byte für Byte verglichen
@@ -73,7 +77,7 @@ Disassembler, Emulator, C64-Maschine und Agenten-Schnittstelle (Meilensteine 0.2
   Bedienung von Hand ([docs/walkthrough.md](docs/walkthrough.md))
 - selbstentpackende Programme (Exomizer & Co.) bis zum entpackten Code laufen lassen ([docs/unpacking.md](docs/unpacking.md))
 
-**Monitor** (`m6510tool monitor`, [docs/monitor.md](docs/monitor.md))
+**Monitor** (`m6510tool monitor`, [docs/monitor.md](docs/monitor.md)) – *fertig*
 - klassische Eingabeschleife wie bei den Schwesterprojekten, Zahlen hexadezimal: disassemblieren, Speicher ansehen/ändern/
   füllen/vergleichen/kopieren/suchen, **Zeilen assemblieren**, Register, Einzelschritt/Step over/bis Rückkehr/laufen,
   Haltepunkte und Watchpoints, Symbole, Dateien, Checkpoints, Snapshots, C64-Speicherkonfiguration
@@ -98,6 +102,14 @@ ctest --test-dir build
 ```
 
 Im Monitor zum Beispiel `d` (disassemblieren), `run` (starten wie `RUN`), `console` (Ausgabe), `r` (Register), `?` (Hilfe).
+
+```sh
+./build/m6510tool asm examples/c64/hello_c64.asm -o hello_c64.prg
+python3 agent/m6510_annotate.py --prg hello_c64.prg --dry-run   # Analyse: Routinen, Sprungtabellen, Daten (ohne Modell)
+python3 agent/m6510_annotate.py --prg hello_c64.prg --out hello_kommentiert.asm --lang Deutsch   # mit Ollama
+```
+
+Schritt für Schritt: [docs/walkthrough.md](docs/walkthrough.md).
 
 Voraussetzungen: CMake ≥ 3.16, C++20-Compiler (GCC ≥ 11, Clang ≥ 14, MSVC 2022).
 

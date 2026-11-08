@@ -95,6 +95,8 @@ public:
     [[nodiscard]] std::string screenMode() const;
 
     std::map<std::string, std::int64_t> symbols;
+    /// [start, end) of the program loaded or assembled last (the default range of the analysis).
+    std::optional<std::pair<Address, std::uint32_t>> programRange;
     std::map<std::string, Snapshot> checkpoints;
 
 private:
@@ -107,8 +109,5 @@ private:
     std::string attached_;
     std::vector<WatchSpec> watches_;
 };
-
-/// Screen code -> printable ASCII character for a text view of the screen ('.' for graphics).
-[[nodiscard]] char screenCodeToChar(Byte code);
 
 }  // namespace m6510

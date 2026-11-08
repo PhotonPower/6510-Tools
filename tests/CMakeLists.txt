@@ -1,5 +1,5 @@
 # Each suite is one executable without an external test framework (see test_util.hpp).
-foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session monitor)
+foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session monitor video reverse jumptable datatypes)
   add_executable(test_${name} test_${name}.cpp)
   target_link_libraries(test_${name} PRIVATE m6510core)
   m6510_set_warnings(test_${name})
@@ -25,3 +25,11 @@ add_test(NAME cli_serve
 add_test(NAME cli_monitor
          COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSCRIPT=${PROJECT_SOURCE_DIR}/examples/monitor_session.txt
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_monitor.cmake)
+
+# The orchestrator tests need Python 3 (standard library only) and the m6510tool binary (docs/reverse-engineering.md).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+  add_test(NAME agent
+           COMMAND ${CMAKE_COMMAND} -E env "M6510TOOL=$<TARGET_FILE:m6510tool>" ${Python3_EXECUTABLE} -W ignore -m unittest discover
+                   -s ${CMAKE_CURRENT_SOURCE_DIR}/agent)
+endif()
