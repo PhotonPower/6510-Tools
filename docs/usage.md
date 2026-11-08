@@ -1,7 +1,8 @@
 # Benutzung von `m6510tool`
 
-> **Stand 0.1:** nur `help` und `version`. Die übrigen Befehle sind die Spezifikation für die Meilensteine 0.2–0.6;
-> Optionen orientieren sich an `z80tool` und `m68ktool`, damit man zwischen den Projekten nicht umlernen muss.
+> **Stand 0.2:** `asm`, `dis` und `basic list` sind umgesetzt (Eingabe PRG, P00, Raw). `monitor`, `serve`, `d64`, `t64`,
+> `crt` und die Disassembler-Eingabe aus Images sind die Spezifikation für die Meilensteine 0.3–0.6. Optionen orientieren
+> sich an `z80tool` und `m68ktool`, damit man zwischen den Projekten nicht umlernen muss.
 
 ```sh
 m6510tool help
@@ -26,29 +27,38 @@ m6510tool asm quelle.asm [-o ausgabe.prg] [--raw] [-l listing|-] [-s symbole] [-
 | `--vice-labels datei` | Labeldatei für den VICE-Monitor |
 | `--org adresse` | Startadresse, falls der Quelltext keine setzt (Standard `$0801`) |
 | `--no-illegal`, `--unstable` | erlaubte Opcodes (siehe [assembler-syntax.md](assembler-syntax.md#wahl-der-befehlsform)) |
-| `-D name=wert` | Symbol vorgeben |
+| `-D name[=wert]` | Symbol vorgeben (ohne Wert: 1) |
 
-Ausgabe auf der Konsole: `datei: N bytes, $XXXX - $YYYY, E error(s)`.
+Ausgabe auf der Konsole: `datei: N bytes, $XXXX - $YYYY, 0 error(s)` (auf stderr, wenn Listing oder Symbole nach `-`
+gehen). Fehler: `datei:zeile: error: text`, Rückgabewert 1, keine Ausgabedatei.
 
 ## `dis` – Disassembler
 
 ```sh
-m6510tool dis eingabe [--org adresse] [--from a --to b] [-e einstieg …] [--linear] [-c kommentare.txt]
-                      [--asm] [--no-bytes] [--style dollar|c|h] [--illegal none|stable|all] [--symbols datei]
-                      [--no-kernal-names] [--no-io-names] [-o ausgabe]
+m6510tool dis eingabe [--org adresse] [--raw] [--from a] [--to b] [-e einstieg …] [--linear] [-c kommentare.txt]
+                      [--asm] [--no-bytes] [--no-xrefs] [--style dollar|c|h] [--illegal none|stable|all]
+                      [--symbols datei] [--no-kernal-names] [-o ausgabe]
 ```
 
 | Option | Bedeutung |
 |---|---|
-| Eingabe | PRG/P00 (Ladeadresse aus der Datei), Raw (braucht `--org`), `disk.d64:NAME` (Datei aus einem D64), `band.t64:NAME`, CRT (`--bank n`) |
+| Eingabe | PRG/P00 (Ladeadresse aus der Datei; `--org` verschiebt), Raw (`--raw` oder Endung `.bin`/`.raw`; braucht `--org`); geplant: `disk.d64:NAME`, `band.t64:NAME`, CRT (`--bank n`) |
+| `--from a`, `--to b` | nur diesen Bereich zerlegen (`--to` **einschließlich**); Standard: das ganze Programm |
 | `-e adresse` | Einstiegspunkt (mehrfach); Standard: die `SYS`-Adresse eines BASIC-Starters, sonst die Ladeadresse |
 | `--linear` | ohne Ablaufanalyse alles der Reihe nach dekodieren |
 | `-c datei` | Kommentardatei ([formats.md](formats.md#kommentardatei-disassembler--c)); kommentierte Adressen sind Einstiegspunkte |
 | `--asm` | wieder assemblierbarer Quelltext (mit Labels, byte-genau) |
 | `--no-bytes` | Bytes nicht anzeigen |
+| `--no-xrefs` | keine Aufruferliste an den Labels |
+| `--style` | Zahlenschreibweise `$1F` (Standard), `0x1F` oder `1FH` |
+| `-o datei` | Ausgabe in eine Datei (Standard: Bildschirm) |
 | `--illegal` | welche undokumentierten Opcodes als Befehle gelten (Standard `stable`) |
-| `--symbols datei` | Symbole vorgeben (Format der Symboltabelle oder VICE-Labels) |
-| `--no-kernal-names`, `--no-io-names` | KERNAL-Einsprünge bzw. I/O-Register nicht als Namen zeigen |
+| `--symbols datei` | Symbole vorgeben (Format der Symboltabelle `-s` oder VICE-Labels); Namen im Bereich werden zu Labels |
+| `--no-kernal-names` | KERNAL-Einsprünge nicht als Namen zeigen (I/O-Registernamen und `--no-io-names` kommen mit 0.3) |
+
+Ohne `-e` und Kommentardatei beginnt die Ablaufanalyse an der `SYS`-Adresse eines BASIC-Starters, sonst an der
+Ladeadresse. Ein BASIC-Starter, wie ihn `.BASIC` erzeugt, erscheint als `.BASIC zeile,ziel`; andere BASIC-Zeilen bleiben
+`.BYTE` (lesbar mit `basic list`).
 
 ## `basic` – BASIC-Programme
 
@@ -56,7 +66,7 @@ m6510tool dis eingabe [--org adresse] [--from a --to b] [-e einstieg …] [--lin
 m6510tool basic list prog.prg        # detokenisiertes Listing
 ```
 
-## `d64`, `t64`, `crt` – Images
+## `d64`, `t64`, `crt` – Images (geplant, 0.6)
 
 ```sh
 m6510tool d64 info  disk.d64                 # Name, ID, freie Blöcke, Fehlerbytes
@@ -68,7 +78,7 @@ m6510tool t64 ls|extract band.t64 …
 m6510tool crt info  modul.crt                # Typ, Leitungen, Chips/Bänke
 ```
 
-## `monitor` – interaktiver Monitor
+## `monitor` – interaktiver Monitor (geplant, 0.4)
 
 ```sh
 m6510tool monitor [datei] [--org adresse] [--c64] [--roms verzeichnis] [--no-files]
@@ -76,7 +86,7 @@ m6510tool monitor [datei] [--org adresse] [--c64] [--roms verzeichnis] [--no-fil
 
 Siehe [monitor.md](monitor.md).
 
-## `serve` – Emulator-Server für Agenten
+## `serve` – Emulator-Server für Agenten (geplant, 0.3)
 
 ```sh
 m6510tool serve [--allow-files]

@@ -1,5 +1,5 @@
 # Each suite is one executable without an external test framework (see test_util.hpp).
-foreach(name format memory)
+foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io)
   add_executable(test_${name} test_${name}.cpp)
   target_link_libraries(test_${name} PRIVATE m6510core)
   m6510_set_warnings(test_${name})
@@ -9,3 +9,9 @@ endforeach()
 # Smoke test of the command line tool.
 add_test(NAME cli_version COMMAND m6510tool version)
 set_tests_properties(cli_version PROPERTIES PASS_REGULAR_EXPRESSION "m6510tool [0-9]+\\.[0-9]+\\.[0-9]+")
+
+# Example program: assemble -> disassemble (--asm) -> assemble again -> identical files; BASIC listing.
+add_test(NAME cli_roundtrip
+         COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSRC=${PROJECT_SOURCE_DIR}/examples/hello.asm
+                 -DCOMMENTS=${PROJECT_SOURCE_DIR}/examples/hello.comments.txt -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_roundtrip.cmake)

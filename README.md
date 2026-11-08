@@ -11,31 +11,34 @@ lokalen LLM-Agenten, der Programme analysiert und kommentiert.
 
 > **Zielplattform:** Commodore **64** (MOS 6510, PAL) – siehe [docs/c64.md](docs/c64.md).
 
-> **Status: Version 0.1 – Projektgerüst.** Build, Tests, CI, Kernbausteine (`types`, `format`, `memory`) und die
-> vollständige Dokumentation des geplanten Umfangs sind da. Alles Weitere ist **geplant**; die Reihenfolge steht in der
-> [Roadmap](docs/roadmap.md). Die Dokumente unter `docs/` beschreiben den Zielzustand und sagen jeweils oben, was davon
-> schon umgesetzt ist.
+> **Status: Meilenstein 0.2 (Assembler, Disassembler).** Opcode-Tabelle, Dekoder, Assembler, Disassembler, PRG/P00 und
+> BASIC-Detokenisierer sind fertig und getestet (exhaustiver Roundtrip über alle 256 Opcodes mit allen Operandenwerten,
+> Kreuzprüfung gegen ca65/da65 in der CI). Emulator, Monitor, Agenten-Schnittstelle und Reverse Engineering folgen
+> ([Roadmap](docs/roadmap.md)). Die Dokumente unter `docs/` sagen jeweils oben, was davon schon umgesetzt ist.
 
-## Geplanter Umfang
+## Umfang
 
-Derselbe Umfang wie bei den Schwesterprojekten, übertragen auf den 6510 und den C64:
+Derselbe Umfang wie bei den Schwesterprojekten, übertragen auf den 6510 und den C64. **Fertig** sind Assembler und
+Disassembler (Meilenstein 0.2); alles Weitere ist geplant:
 
-**Assembler** (`m6510tool asm`, [docs/assembler-syntax.md](docs/assembler-syntax.md))
+**Assembler** (`m6510tool asm`, [docs/assembler-syntax.md](docs/assembler-syntax.md)) – *fertig*
 - alle 151 dokumentierten Opcodes (56 Befehle, 13 Adressierungsarten), auf Wunsch auch die **undokumentierten** des NMOS-6510
   (`LAX`, `SAX`, `DCP`, `ISC`, `SLO`, `RLA`, `SRE`, `RRA`, `ANC`, `ALR`, `ARR`, `SBX`, …)
 - Labels mit Vorwärtsreferenzen, lokale Labels, `EQU`/`=`, `ORG`/`*=` (mehrfach), `.BYTE`/`.WORD`/`.TEXT`/`.FILL`, PETSCII- und
   Bildschirmcode-Strings; Zero Page oder absolut wird **automatisch im Mehrpass-Verfahren** gewählt
 - Ausdrücke mit `<` (Low-Byte), `>` (High-Byte), `*` (aktuelle Adresse); Zahlen als `123`, `$1F`, `0x1F`, `%1010`, `'A'`
-- Ausgabe: **PRG** (mit Ladeadresse), Raw-Binary, Listing, Symboltabelle, VICE-Labeldatei; **BASIC-Starter** (`10 SYS 2061`)
-  per Pseudobefehl
+- Ausgabe: **PRG** (mit Ladeadresse), Raw-Binary, Listing, Symboltabelle, VICE-Labeldatei; **BASIC-Starter** (`10 SYS2061`)
+  per Pseudobefehl `.BASIC`
 
-**Disassembler** (`m6510tool dis`, [docs/usage.md](docs/usage.md))
-- Ablaufanalyse: folgt `JSR`, `JMP`, Verzweigungen und `JMP (…)`-Vektoren ab den Einstiegspunkten und trennt Code von Daten;
-  alternativ linearer Durchlauf
-- Labels, Querverweise, Kommentardatei (`Adresse,"Text"`), KERNAL-Einsprünge und I/O-Register als Namen (`JSR CHROUT`,
-  `STA EXTCOL`), **selbstmodifizierender Code** als `label+1`
+**Disassembler** (`m6510tool dis`, [docs/usage.md](docs/usage.md)) – *fertig bis auf D64/T64/CRT und I/O-Namen*
+- Ablaufanalyse: folgt `JSR`, `JMP` und Verzweigungen ab den Einstiegspunkten (Standard: die `SYS`-Adresse des
+  BASIC-Starters) und trennt Code von Daten; alternativ linearer Durchlauf. Geplant (0.5): `JMP (…)`-Vektoren,
+  `RTS`-Sprungtabellen
+- Labels, Querverweise, Kommentardatei (`Adresse,"Text"`), Symboldateien (auch VICE-Labels), KERNAL-Einsprünge als Namen
+  (`JSR CHROUT`; I/O-Register wie `STA EXTCOL` geplant), **selbstmodifizierender Code** als `label+1`
 - Ausgabe als lesbares Listing **oder** als wieder assemblierbarer Quelltext (`--asm`, byte-genau)
-- Eingabe: PRG, P00, Raw, Datei aus einem **D64**/**T64**, Cartridge (**CRT**); BASIC-Programme werden detokenisiert angezeigt
+- Eingabe: PRG, P00, Raw (geplant: Datei aus einem **D64**/**T64**, Cartridge **CRT**); `m6510tool basic list` detokenisiert
+  BASIC-Programme
 
 **Emulator** (`m6510::Cpu`, [docs/emulator.md](docs/emulator.md))
 - alle 256 Opcodes inklusive der undokumentierten (JAM hält an), NMOS-**Dezimalmodus** mit seinen Flag-Eigenheiten,
@@ -79,16 +82,15 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build
 
-./build/m6510tool version
-./build/m6510tool help
-```
-
-Geplant (ab Meilenstein 0.2–0.4):
-
-```sh
 ./build/m6510tool asm examples/hello.asm -l - -o hello.prg      # assemblieren, Listing auf den Bildschirm
 ./build/m6510tool dis hello.prg -c examples/hello.comments.txt  # disassemblieren (Ladeadresse aus dem PRG)
 ./build/m6510tool dis hello.prg --asm                           # als wieder assemblierbarer Quelltext
+./build/m6510tool basic list hello.prg                          # BASIC-Teil detokenisiert
+```
+
+Geplant (ab Meilenstein 0.3/0.4):
+
+```sh
 ./build/m6510tool monitor hello.prg                             # interaktiver Monitor
 ./build/m6510tool serve < examples/agent_session.jsonl          # Emulator per JSON-Protokoll
 ```
@@ -116,19 +118,24 @@ Voraussetzungen: CMake ≥ 3.16, C++20-Compiler (GCC ≥ 11, Clang ≥ 14, MSVC 
 | [CONTRIBUTING.md](CONTRIBUTING.md)                         | Bauen, Konventionen                                        |
 | [CHANGELOG.md](CHANGELOG.md)                               | Änderungen                                                 |
 
-## Beispiel (Ziel für Meilenstein 0.2)
+## Beispiel
+
+`examples/hello.asm` assemblieren (mit Symboltabelle) und wieder zerlegen:
 
 ```console
-$ m6510tool asm examples/hello.asm -o hello.prg
+$ m6510tool asm examples/hello.asm -o hello.prg -s hello.sym
 examples/hello.asm: 33 bytes, $0801 - $0821, 0 error(s)
 
-$ m6510tool dis hello.prg -c examples/hello.comments.txt --no-bytes
+$ m6510tool dis hello.prg -c examples/hello.comments.txt --symbols hello.sym --no-bytes
 ; 6510 disassembly  $0801 - $0821
-0801     .BASIC 10,start            ; 10 SYS2061
+
+CHROUT = $FFD2
+
+0801     .BASIC 10,start                      ; 10 SYS2061
 start:
-080D     LDX #$00                   ; entry: print the message below
+080D     LDX #$00                             ; entry: print the message below
 next:                               ; <- $0818
-080F     LDA message,X              ; fetch the next character
+080F     LDA message,X                        ; fetch the next character
 0812     BEQ done
 0814     JSR CHROUT
 0817     INX
@@ -136,10 +143,15 @@ next:                               ; <- $0818
 done:                               ; <- $0812
 081A     RTS
 message:                            ; <- $080F
-081B     .BYTE "HELLO",$0D,$00
+081B     .BYTE "HELLO",$0D,$00                ; |HELLO..|
 ```
 
-(Adressen und Größe stehen erst fest, wenn der Assembler existiert; das Beispielprogramm liegt schon in `examples/`.)
+Ohne Symboltabelle heißen die Labels `L_080D` usw.; KERNAL-Einsprünge (`CHROUT`) und der BASIC-Starter werden immer
+erkannt. Mit `--asm` entsteht Quelltext, der sich wieder zum identischen Programm assemblieren lässt:
+
+```console
+$ m6510tool dis hello.prg --asm -o re.asm && m6510tool asm re.asm -o re.prg && cmp hello.prg re.prg
+```
 
 ## Projektstruktur
 
@@ -149,7 +161,7 @@ src/           Implementierung
 app/main.cpp   Kommandozeilenwerkzeug m6510tool
 agent/         Orchestrator für Ollama (Python, nur Standardbibliothek) – geplant
 tests/         Unit-Tests (CTest); tests/agent: Orchestrator gegen einen Mock-Ollama – geplant
-tools/         Entwicklerwerkzeuge: CI-Annotationen; geplant: Kreuzprüfung gegen da65/64tass, Testsatz-Runner, Differenztest
+tools/         Entwicklerwerkzeuge: Formentabelle, Kreuzprüfung gegen ca65/da65, CI-Annotationen; geplant: Testsatz-Runner, Differenztest
 examples/      Beispielprogramm mit Kommentardatei
 docs/          Dokumentation (Deutsch)
 ```
