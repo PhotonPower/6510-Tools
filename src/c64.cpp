@@ -26,7 +26,7 @@ constexpr const char* kCia2Names[16] = {"CI2PRA", "CI2PRB", "C2DDRA", "C2DDRB", 
 C64::C64(Memory& ram, Cpu& cpu) : ram_(ram), cpu_(cpu) {
     cpu_.readOverride = [this](Address a, Byte& v) { return readMapped(a, v, true); };
     cpu_.writeOverride = [this](Address a, Byte v) {
-        if (a >= 0xD000 && a < 0xE000 && ioVisible()) return writeIo(a, v);
+        if (a >= 0xD000 && a < 0xE000 && (ioVisible() || ultimax())) return writeIo(a, v);
         if (ultimax() && ((a >= 0x1000 && a < 0x8000) || (a >= 0xA000 && a < 0xD000))) return true;  // not connected
         return false;  // RAM, also underneath ROM
     };
@@ -134,10 +134,11 @@ void C64::write(Address a, Byte v) {
         ram_.write8(a, v);
         return;
     }
-    if (a >= 0xD000 && a < 0xE000 && ioVisible()) {
+    if (a >= 0xD000 && a < 0xE000 && (ioVisible() || ultimax())) {
         writeIo(a, v);
         return;
     }
+    if (ultimax() && ((a >= 0x1000 && a < 0x8000) || (a >= 0xA000 && a < 0xD000))) return;  // not connected
     ram_.write8(a, v);
 }
 

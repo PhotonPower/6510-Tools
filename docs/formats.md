@@ -1,7 +1,8 @@
 # Dateiformate
 
-> **Stand 0.5:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen), alle
-> Ausgabeformate des Assemblers, Snapshots, Annotationen und PNG-Screenshots sind umgesetzt. T64/D64/CRT kommen mit 0.6, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
+> **Stand 0.6:** Kommentardatei, Raw, PRG, P00 (lesen), BASIC (detokenisieren, Starter erzeugen/erkennen), alle
+> Ausgabeformate des Assemblers, Snapshots, Annotationen, PNG-Screenshots und das Lesen von T64, D64 und CRT sind umgesetzt.
+> D64 schreiben ist eine Idee, Intel HEX ist zurückgestellt. Alle Leser lehnen beschädigte Dateien mit einer Fehlermeldung ab; Robustheitstests mit mutierten Dateien gehören
 > zu jedem Leser ([testing.md](testing.md)).
 
 ## Kommentardatei (Disassembler, `-c`)
@@ -67,15 +68,21 @@ Dateityp, Start- und Endadresse, Offset in der Datei, Name), dann die Daten. Bek
   Sektor, das zweite Byte ist dann die Position des letzten benutzten Bytes.
 - Geprüft wird auf Schleifen in Ketten, Zeiger außerhalb der Diskette und falsche Größen.
 - `m6510tool d64 info|ls|extract|boot|block`: Überblick, Verzeichnis, Datei (als PRG), erstes Programm wie
-  `LOAD"*",8,1`, rohen Block ansehen. Kreuzprüfung gegen `c1541` aus VICE ([testing.md](testing.md)).
+  `LOAD"*",8,1`, rohen Block ansehen. Kreuzprüfung gegen `c1541` aus VICE in der CI ([testing.md](testing.md)).
+- Namen werden wie auf dem C64 gesucht: `*` passt auf den Rest, `?` auf ein Zeichen, `*` allein auf die erste Datei;
+  Groß-/Kleinschreibung zählt beim Vergleich der Texte nicht. Bei 40 Spuren zählen die freien Blöcke nur Spur 1–35 (die BAM-
+  Erweiterungen von SpeedDOS & Co. werden nicht ausgewertet).
+- Schreiben (`D64 → Diskette`) gibt es nicht; die Tests bauen ihre Images selbst.
 - Nicht unterstützt: G64 (GCR-Rohdaten, Kopierschutz), D71/D81 (Idee), Schnelllader und eigene Diskettenformate (die
   Blöcke lassen sich mit `block` trotzdem lesen).
 
 ## CRT (Cartridge)
 
 Kopf `C64 CARTRIDGE   ` (Länge, Version, **Hardwaretyp**, `EXROM`/`GAME`, Name), dann `CHIP`-Pakete (Typ, Bank,
-Ladeadresse, Größe, Daten). Zuerst: Typ 0 (normale 8K-/16K-/Ultimax-Cartridge). Bank-umschaltende Typen (Ocean, Magic Desk,
-EasyFlash, Action Replay …) sind eine Idee für später; ihre Bänke lassen sich aber einzeln disassemblieren.
+Ladeadresse, Größe, Daten). Typ 0 (normale 8K-/16K-/Ultimax-Cartridge) läuft im Emulator: `load_file`/Monitor `l` stecken
+sie in die C64-Maschine ([c64.md](c64.md)), der PC steht auf ihrem Kaltstartvektor (Signatur `CBM80` bei `$8004`) bzw.
+im Ultimax-Modus auf ihrem RESET-Vektor. Bank-umschaltende Typen (Ocean, Magic Desk, EasyFlash, Action Replay …) zeigt
+`m6510tool crt info` mit Namen; ihre Bänke lassen sich mit `crt extract` einzeln disassemblieren, laufen aber nicht.
 
 ## Ausgabe des Assemblers
 

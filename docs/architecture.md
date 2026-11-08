@@ -1,9 +1,9 @@
 # Architektur
 
 > Die Struktur entspricht den Schwesterprojekten [Z80](https://github.com/PhotonPower/Z80) und
-> [MC68000](https://github.com/PhotonPower/MC68000). **Stand 0.4:** umgesetzt sind die Grundbausteine, Opcode-Tabelle,
+> [MC68000](https://github.com/PhotonPower/MC68000). **Stand 0.6:** umgesetzt sind die Grundbausteine, Opcode-Tabelle,
 > Dekoder, Ausdrucksauswerter, Encoder, Assembler, Disassembler, PETSCII/BASIC, PRG/P00 (0.2), Prozessorkern, C64-Maschine,
-> KERNAL-Emulation, Snapshots, Sitzung (0.3) und Monitor (0.4); Spalte „Stand“.
+> KERNAL-Emulation, Snapshots, Sitzung (0.3), Monitor (0.4), Bild, Analyse, Listing (0.5) und Images (0.6); Spalte „Stand“.
 
 ## Überblick
 
@@ -56,7 +56,7 @@ Agenten-Schnittstelle (`Session`) sind weitere Frontends derselben Bibliothek un
 | `disassembler.hpp`          | Ablaufanalyse, Querverweise, Kommentare, Symboldateien, KERNAL-Namen, Ausgabe (`render`) | fertig   |
 | `petscii.hpp`               | PETSCII ↔ ASCII, Bildschirmcodes, BASIC-Token (Detokenisierer, BASIC-Starter)          | fertig   |
 | `image_io.hpp`              | Dateien lesen/schreiben: Raw, PRG, P00                                                  | fertig   |
-| `d64.hpp`, `t64.hpp`, `crt.hpp` | Disk-, Tape- und Cartridge-Images                                                   | geplant  |
+| `d64.hpp`, `t64.hpp`, `crt.hpp` | Disk-, Tape- und Cartridge-Images lesen (D64 mit 35/40 Spuren und Fehlerbytes, Muster `*`/`?`; T64 mit den üblichen Fehlern; CRT-Pakete) | fertig |
 | `cpu.hpp`                   | `Registers`, `Cpu` (Ausführung, Zyklen, IRQ/NMI, Breakpoints, Hooks, Prozessorport)     | fertig   |
 | `snapshot.hpp`              | `Snapshot` (CPU + Speicher + Maschinenzustand), Datei, Speicher-Diff                    | fertig   |
 | `json.hpp`                  | kleiner JSON-Baustein (Parser/Ausgabe, Einfügereihenfolge; aus dem MC68000-Projekt)     | fertig   |

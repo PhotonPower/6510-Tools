@@ -1,8 +1,7 @@
 # Agenten-Protokoll (`m6510tool serve`)
 
-> **Stand 0.5:** Grundbefehle, Lauf, Checkpoints, Snapshots, die C64-Befehle, `screenshot` mit den Bildvergleichen und die
-> Reverse-Engineering-Befehle sind umgesetzt (Abschnitt „Befehle“). Die Entpack-Befehle (0.6) sind noch
-> **geplant** und unten gekennzeichnet. Grundregeln und Befehlsnamen sind die von
+> **Stand 0.6:** alle Befehle sind umgesetzt: Grundbefehle, Lauf, Checkpoints, Snapshots, die C64-Befehle, `screenshot` mit
+> den Bildvergleichen, die Reverse-Engineering-Befehle und die Entpack-Befehle; `load_file` und `attach` lesen D64/T64/CRT. Grundregeln und Befehlsnamen sind die von
 > [`z80tool serve`](https://github.com/PhotonPower/Z80/blob/main/docs/agent-protocol.md) und
 > [`m68ktool serve`](https://github.com/PhotonPower/MC68000/blob/main/docs/agent-protocol.md), damit ein Orchestrator
 > alle drei Maschinen gleich bedienen kann.
@@ -74,9 +73,9 @@ Gesamtzähler seit dem letzten `reset`.
 | `dis` | `addr?` (PC), `count?` (8, höchstens 1000) | `lines:[{addr,label?,bytes,text,target?}]` – so, wie der Prozessor den Speicher sieht; Marken und KERNAL-Namen als Operanden |
 | `read` | `addr`, `len?` (16, höchstens 4096), `view?` (`cpu` = mit ROM/I/O nach `$01`, `ram`) | `hex`, `ascii`, `screen` (die Bytes als Bildschirmcodes gelesen) |
 | `write` | `addr`, `hex` oder `bytes[]` (höchstens 65 536) | über den Bus schreiben: unter ROM ins RAM, in sichtbares I/O an die Register (mit Protokolleintrag), `$00/$01` an den Port |
-| `load_file` | `file`, `type?` (`auto`, `raw`, `prg`, `p00`), `addr?` | Datei laden (*`--allow-files`*); `raw` braucht `addr`, bei PRG/P00 verschiebt `addr`. Antwort: `start`, `end`, `entry` (`SYS`-Adresse eines BASIC-Starters bei `$0801`, sonst die Ladeadresse; der PC wird gesetzt), `basic` (erste BASIC-Zeile). D64/T64/CRT: Meilenstein 0.6 |
+| `load_file` | `file`, `type?` (`auto`, `raw`, `prg`, `p00`, `d64`, `t64`, `crt`), `name?`, `addr?` | Datei laden (*`--allow-files`*); `raw` braucht `addr`, bei PRG/P00 verschiebt `addr`. Aus einem D64/T64 die Datei `name` (Muster mit `*`/`?`; ohne `name` die erste; auch als `"file":"disk.d64:NAME"`). Ein CRT (Typ 0, nur `c64`) wird gesteckt und die Maschine zurückgesetzt; `entry` ist dann sein Kaltstart- bzw. RESET-Vektor. Antwort: `start`, `end`, `entry` (`SYS`-Adresse eines BASIC-Starters bei `$0801`, sonst die Ladeadresse; der PC wird gesetzt), `basic` (erste BASIC-Zeile), `source` (woher die Datei kam), `cartridge` (`8K`, `16K`, `Ultimax`) |
 | `load_rom` | `which` (`basic`, `kernal`, `char`), `file` | ROM laden (*`--allow-files`*, nur `c64`). Ein KERNAL-ROM ersetzt die Emulation (RESET aus dem ROM) |
-| `attach` | `file` (PRG/P00 oder Verzeichnis) | Quelle für `LOAD` der KERNAL-Emulation (*`--allow-files`*): eine Datei beantwortet jeden Namen, in einem Verzeichnis wird `NAME.prg` gesucht (`*` = die erste) |
+| `attach` | `file` (PRG/P00, Verzeichnis, D64 oder T64) | Quelle für `LOAD` der KERNAL-Emulation (*`--allow-files`*): eine Datei beantwortet jeden Namen, in einem Verzeichnis wird `NAME.prg` gesucht (`*` = die erste), in einem D64/T64 das Verzeichnis des Images (Muster wie auf dem C64) |
 | `regs` / `set` | `regs:{"A":5,"X":"0x10","PC":"start","P":"0x24"}` | Register lesen / setzen; `PC` weckt aus `JAM`; ein neues `I` in `P` gilt sofort (ohne die Verzögerung von `CLI`/`SEI`) |
 | `step` | `n?` (1), `trace?` | `n` Befehle (Haltepunkte werden übergangen); mit `trace:true` zusätzlich `trace:[{addr,bytes,text,cycles}]` (höchstens 1000) |
 | `step_over` | – | ein Befehl; bei `JSR` bis zur Rückkehr auf gleicher Stapelhöhe |
@@ -84,6 +83,10 @@ Gesamtzähler seit dem letzten `reset`.
 | `run_until_return` | `max_instructions?` | bis die aktuelle Routine zurückkehrt (`RTS`/`RTI`) |
 | `call` | `addr`, `regs?`, `memory?` (`{"0xFB":"05 07"}`), `return_address?` (`0xFFF0`), `frame?` (`jsr`, `irq`, `rti`), `max_instructions?` | Routine wie eine Funktion aufrufen: `return_address − 1` stapeln (wie `JSR`), Register und Speicher setzen, laufen. `returned` ist **nur dann true**, wenn der PC die Rücksprungadresse erreicht **und** `S` wieder den Wert vor dem Aufruf hat; sonst `returned:false` (mit `note`, wenn nur die Stapelhöhe nicht stimmt). `frame:"irq"` ruft einen Interrupt-Handler auf: Rücksprungadresse und `P` wie bei einem IRQ, dazu `A`, `X`, `Y` wie beim IRQ-Einsprung des KERNAL (`$FF48`); der Handler kehrt mit `RTI` zurück. `frame:"rti"` legt nur Adresse und `P` ab (Handler an `$FFFE`/`$FFFA`) |
 | `run_program` | `addr?`, `max_instructions?` | `c64`: Programm starten wie `SYS` aus BASIC (Einschaltzustand, `A`/`X`/`Y`/`P` aus `$030C–$030F`, Rücksprung zur Falle `$FFF6` = „program returned to BASIC“, IRQs an). Ohne `addr` die `SYS`-Adresse des BASIC-Starters bei `$0801`. Antwort wie `run`, dazu `entry` |
+| `track_writes` | `on?` (true), `clear?` (true) | jedes Byte markieren, das der Prozessor schreibt (für selbstentpackende Programme, [unpacking.md](unpacking.md)); `on:false` beendet es |
+| `written` | `min_length?` (16), `limit?` (20) | `bytes` (Zahl der markierten Bytes), `ranges:[{start,end,size}]` (zusammenhängende geschriebene Bereiche, die größten zuerst) |
+| `run_until_unpacked` | `min_written?` (4096), `ignore?` (`[["0x0400","0x0800"]]`), `continue?`, `max_instructions?` (50 000 000) | startet die Markierung neu und läuft, bis ein Befehl aus einem selbst geschriebenen, zusammenhängenden Bereich von mindestens `min_written` Byte geholt wird: `stop:"unpacked"`, `pc` (Einsprung), `region:{start,end,size}`, `written_bytes`, `ranges`. Zero Page und Stapelseite zählen nie. `continue:true` sucht die nächste Stufe (die zuletzt gefundene zählt dann nicht mehr) |
+| `save_memory` | `addr`, `len`, `file`, `view?` (`cpu`, `ram`), `format?` (`prg`, `raw`) | Speicherbereich als PRG mit Ladeadresse (Standard) oder roh speichern (*`--allow-files`*); `view:"ram"` liest den RAM unter ROM und I/O |
 | `break` / `unbreak` | `addr` | Breakpoint setzen / entfernen |
 | `watch` / `unwatch` | `addr`, `len?` (1), `kind?` (`write`, `read`, `access`) | Speicherüberwachung; der Lauf hält **nach** dem zugreifenden Befehl |
 | `breaks` / `clear_breaks` | – | Breakpoints und Watchpoints auflisten / alles löschen |
@@ -104,12 +107,6 @@ Gesamtzähler seit dem letzten `reset`.
 | `symbols` | – | alle Marken aus `asm` |
 | `machine` | `type`, `kernal?` (`hle`, `rom`) | Maschine wählen (siehe oben) |
 | `help` | – | Befehlsliste |
-
-Geplant (Meilenstein 0.6):
-
-| Befehl | Zweck |
-|---|---|
-| `track_writes`, `written`, `run_until_unpacked`, `save_memory` | selbstentpackende Programme ([unpacking.md](unpacking.md)) |
 
 ### Reverse Engineering ([reverse-engineering.md](reverse-engineering.md))
 

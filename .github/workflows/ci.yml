@@ -60,6 +60,19 @@ jobs:
         shell: bash
         run: python3 tools/crosscheck_da65.py build/m6510_dump_forms > da65.log 2>&1 || { cat da65.log; python3 tools/ci_annotate.py "da65 cross-check failed" da65.log; }; cat da65.log; echo "::notice title=da65 cross-check::$(head -2 da65.log | tr '\n' ' ')"
 
+  c1541:
+    name: Cross-check against c1541 (VICE)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install VICE (c1541)
+        run: sudo apt-get update && sudo apt-get install -y vice
+      - name: Build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM6510_BUILD_TESTS=OFF && cmake --build build
+      - name: D64 reader vs c1541
+        shell: bash
+        run: python3 tools/crosscheck_c1541.py build/m6510tool c1541 > c1541.log 2>&1 || { cat c1541.log; python3 tools/ci_annotate.py "c1541 cross-check failed" c1541.log; }; cat c1541.log; echo "::notice title=c1541 cross-check::$(head -1 c1541.log)"
+
   singlestep:
     name: Tom Harte single-step tests (6502, 2.4 million cases)
     runs-on: ubuntu-latest

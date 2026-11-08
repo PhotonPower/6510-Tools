@@ -374,10 +374,14 @@ struct Session::Impl {
         needFiles();
         const std::string type = has("type") ? text("type") : "auto";
         const std::optional<Address> at = has("addr") ? std::optional<Address>(address("addr")) : std::nullopt;
-        const LoadedFile f = s.m_.loadFile(text("file"), type, at);
+        std::string file = text("file");
+        if (has("name")) file += ":" + text("name");  // a file in a D64/T64 image
+        const LoadedFile f = s.m_.loadFile(file, type, at);
         const Program& p = f.program;
         Json j = ok().set("start", hex4(p.address)).set("end", hex4(p.bytes.empty() ? p.address : p.end() - 1));
         if (!f.basic.empty()) j.set("basic", f.basic);
+        if (!f.source.empty()) j.set("source", f.source);
+        if (s.m_.c64() && s.m_.c64()->cartridgeMode() != "none") j.set("cartridge", s.m_.c64()->cartridgeMode());
         j.set("entry", hex4(f.entry));
         return j;
     }
@@ -514,7 +518,8 @@ struct Session::Impl {
             std::stable_sort(ranges.begin(), ranges.end(), [](const auto& a, const auto& b) { return a.second - a.first > b.second - b.first; });
             Json arr = Json::array();
             for (std::size_t i = 0; i < ranges.size() && i < most; ++i) {
-                arr.push(Json::object().set("start", hex4(ranges[i].first)).set("end", hex4(ranges[i].second)).set("size", ranges[i].second - ranges[i].first));
+                arr.push(Json::object().set("start", hex4(ranges[i].first)).set("end", ranges[i].second == 0x10000 ? std::string("0x10000") : hex4(ranges[i].second))
+                             .set("size", ranges[i].second - ranges[i].first));
             }
             return arr;
         };

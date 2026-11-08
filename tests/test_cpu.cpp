@@ -365,5 +365,41 @@ int main() {
         }
     }
 
+    // ---- write tracking for self-extracting programs ------------------------------------------------------------
+    {
+        Memory mem;
+        Cpu cpu(mem);
+        cpu.setPortEnabled(false);
+        // copy 300 bytes from $2000 to $4000, then jump there; the copied code is LDA #1 / JAM
+        const Byte prog[] = {0xA2, 0x00, 0xBD, 0x00, 0x20, 0x9D, 0x00, 0x40, 0xBD, 0x00, 0x21, 0x9D, 0x00, 0x41, 0xE8, 0xD0, 0xF1, 0x4C, 0x00, 0x40};
+        mem.load(0x1000, std::vector<Byte>(std::begin(prog), std::end(prog)));
+        mem.write8(0x2000, 0xA9);
+        mem.write8(0x2001, 0x01);
+        mem.write8(0x2002, 0x02);
+        cpu.registers().pc = 0x1000;
+        CHECK(!cpu.tracking());
+        CHECK(!cpu.written(0x4000));
+        cpu.trackWrites(true);
+        cpu.watchWrittenCode(true, 1024);  // the copy (512 bytes) is too small: runs into the JAM
+        RunResult r = cpu.run(100000);
+        CHECK(r.reason == StopReason::Halted);
+        CHECK_EQ(cpu.writtenBytes(), std::size_t{512});
+        CHECK_EQ(cpu.writtenRanges().size(), std::size_t{1});
+        CHECK_EQ(cpu.writtenRanges()[0].first, Address{0x4000});
+        CHECK_EQ(cpu.writtenRanges()[0].second, std::uint32_t{0x4200});
+        CHECK(cpu.writtenRanges(513).empty());
+        cpu.setHalted(false);
+        cpu.registers().pc = 0x1000;
+        cpu.trackWrites(true);
+        cpu.watchWrittenCode(true, 256);
+        r = cpu.run(100000);
+        CHECK(r.reason == StopReason::WrittenCode);
+        CHECK_EQ(cpu.registers().pc, Address{0x4000});
+        cpu.watchWrittenCode(true, 256, {{0x4000, 0x4100}});  // ignored: it runs on
+        CHECK(cpu.run(10).reason == StopReason::Halted);
+        cpu.trackWrites(false);
+        CHECK_EQ(cpu.writtenBytes(), std::size_t{0});
+    }
+
     return finish("cpu");
 }

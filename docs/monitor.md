@@ -1,9 +1,8 @@
 # Monitor
 
-> **Stand 0.5:** umgesetzt (`m6510::Monitor`, `m6510tool monitor`; `shot` seit 0.5). Befehle und Bedienung übernehmen den Monitor der
+> **Stand 0.6:** umgesetzt (`m6510::Monitor`, `m6510tool monitor`; `shot` seit 0.5, Laden aus D64/T64/CRT seit 0.6). Befehle und Bedienung übernehmen den Monitor der
 > Schwesterprojekte ([Z80](https://github.com/PhotonPower/Z80/blob/main/docs/monitor.md),
-> [MC68000](https://github.com/PhotonPower/MC68000/blob/main/docs/monitor.md)), ergänzt um C64-Befehle. Noch offen:
-> Laden aus D64/T64 (Meilenstein 0.6).
+> [MC68000](https://github.com/PhotonPower/MC68000/blob/main/docs/monitor.md)), ergänzt um C64-Befehle.
 
 `m6510tool monitor` ist ein klassischer Maschinensprache-Monitor mit Eingabeschleife: Speicher ansehen und ändern,
 disassemblieren, Zeilen assemblieren, Programme im Emulator einzeln oder bis zu einem Haltepunkt ausführen. Alles basiert auf
@@ -15,6 +14,7 @@ lässt. Maschine, Symbole, Checkpoints und Watchpoints verwaltet `m6510::Machine
 ```sh
 m6510tool monitor                          # leerer Speicher (generische Maschine, 64 KiB RAM)
 m6510tool monitor programm.prg             # PRG/P00 laden (Ladeadresse aus der Datei), PC = SYS-Adresse
+m6510tool monitor --c64 disk.d64:SPIEL     # eine Datei aus einem Diskettenabbild (auch band.t64:NAME, modul.crt)
 m6510tool monitor --org '$2000' daten.bin  # Raw-Datei an eine Adresse laden (Option dezimal, $ für hex)
 m6510tool monitor --c64 programm.prg       # C64-Speicherkarte mit KERNAL-Emulation
 m6510tool monitor --roms ~/c64roms         # C64 mit eigenen ROMs (basic*, kernal*, char*/chargen*)
@@ -75,7 +75,7 @@ Großbuchstaben, Ziffern und Satzzeichen sind in PETSCII dieselben Codes.
 | `sym [name wert \| -name]` | Symbole anzeigen, setzen, löschen |
 | `symload datei` / `symsave datei` | Symboldateien (Format der Assembler-Ausgabe `-s`; VICE-Labeldateien werden ebenfalls gelesen) |
 | `asm datei [org]` | Quelltext-Datei assemblieren und ins RAM laden; Symbole werden übernommen |
-| `l datei [adr]` | Datei laden: **PRG**/P00 (Ladeadresse aus der Datei, `adr` überschreibt; PC = Ladeadresse bzw. `SYS`-Ziel eines BASIC-Starters), **Raw** (`.bin`/`.raw`, braucht `adr`) |
+| `l datei [adr]` | Datei laden: **PRG**/P00 (Ladeadresse aus der Datei, `adr` überschreibt; PC = Ladeadresse bzw. `SYS`-Ziel eines BASIC-Starters), **Raw** (`.bin`/`.raw`, braucht `adr`), eine Datei aus einem Image (`l "disk.d64:SPIEL"`, `l band.t64:*`; `*`/`?` wie auf dem C64), eine **Cartridge** (`.crt`, Typ 0, nur `machine c64`: stecken und zurücksetzen) |
 | `sv datei von bis [raw]` | Speicherbereich als PRG (Standard) oder Raw speichern (einschließlich `bis`) |
 | `ck name` / `rb name` | Checkpoint (CPU + Speicher + Maschine) anlegen / zurückspielen |
 | `savestate datei` / `loadstate datei` | Snapshot-Datei (`M6510SN1`, [formats.md](formats.md)) |

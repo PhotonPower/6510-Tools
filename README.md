@@ -11,19 +11,19 @@ lokalen LLM-Agenten, der Programme analysiert und kommentiert.
 
 > **Zielplattform:** Commodore **64** (MOS 6510, PAL) – siehe [docs/c64.md](docs/c64.md).
 
-> **Status: Meilenstein 0.5.** Assembler und Disassembler (0.2), Emulator, C64-Maschine mit KERNAL-Emulation,
-> Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3), der Monitor (0.4) sowie Bildschirm als Bild, Analyse,
-> verifiziertes Listing und der Orchestrator für ein lokales Modell (0.5) sind fertig und geprüft: exhaustiver Roundtrip
-> Dekoder/Assembler, Kreuzprüfung gegen ca65/da65, **alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte ohne Abweichung**,
-> Klaus Dormanns Funktionstest und Tausende zufälliger Listings, die sich alle neu assemblieren lassen. Disk-Images und
-> Entpacken (0.6) folgen
-> ([Roadmap](docs/roadmap.md)). Die Dokumente unter `docs/` sagen jeweils oben, was davon schon umgesetzt ist.
+> **Status: Meilenstein 0.6 – der Umfang der Schwesterprojekte ist erreicht.** Assembler und Disassembler (0.2), Emulator,
+> C64-Maschine mit KERNAL-Emulation, Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3), der Monitor (0.4),
+> Bildschirm als Bild, Analyse, verifiziertes Listing und der Orchestrator für ein lokales Modell (0.5) sowie D64/T64/CRT und
+> selbstentpackende Programme (0.6) sind fertig und geprüft: exhaustiver Roundtrip Dekoder/Assembler, Kreuzprüfung gegen
+> ca65/da65 und c1541, **alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte ohne Abweichung**, Klaus Dormanns
+> Funktionstest, Tausende zufälliger Listings, die sich alle neu assemblieren lassen, und ein Blindtest des Orchestrators.
+> Offen ist vor allem die Erprobung mit einem echten lokalen Modell ([Roadmap](docs/roadmap.md)). Die Dokumente unter `docs/` sagen jeweils oben, was davon schon umgesetzt ist.
 
 ## Umfang
 
 Derselbe Umfang wie bei den Schwesterprojekten, übertragen auf den 6510 und den C64. **Fertig** sind Assembler,
-Disassembler, Emulator, C64-Maschine, Agenten-Schnittstelle, Monitor und Reverse Engineering (Meilensteine 0.2 bis 0.5);
-Images und Entpacken sind geplant:
+Disassembler, Emulator, C64-Maschine, Agenten-Schnittstelle, Monitor, Reverse Engineering, Images und Entpacken
+(Meilensteine 0.2 bis 0.6):
 
 **Assembler** (`m6510tool asm`, [docs/assembler-syntax.md](docs/assembler-syntax.md)) – *fertig*
 - alle 151 dokumentierten Opcodes (56 Befehle, 13 Adressierungsarten), auf Wunsch auch die **undokumentierten** des NMOS-6510
@@ -34,14 +34,15 @@ Images und Entpacken sind geplant:
 - Ausgabe: **PRG** (mit Ladeadresse), Raw-Binary, Listing, Symboltabelle, VICE-Labeldatei; **BASIC-Starter** (`10 SYS2061`)
   per Pseudobefehl `.BASIC`
 
-**Disassembler** (`m6510tool dis`, [docs/usage.md](docs/usage.md)) – *fertig bis auf D64/T64/CRT und I/O-Namen*
+**Disassembler** (`m6510tool dis`, [docs/usage.md](docs/usage.md)) – *fertig bis auf I/O-Namen (die hat das Listing des Reverse Engineering)*
 - Ablaufanalyse: folgt `JSR`, `JMP` und Verzweigungen ab den Einstiegspunkten (Standard: die `SYS`-Adresse des
   BASIC-Starters) und trennt Code von Daten; alternativ linearer Durchlauf. Sprungtabellen (`JMP (…)`, `RTS`-Trick) erkennt die
   Analyse des Reverse Engineering
 - Labels, Querverweise, Kommentardatei (`Adresse,"Text"`), Symboldateien (auch VICE-Labels), KERNAL-Einsprünge als Namen
   (`JSR CHROUT`; I/O-Register wie `STA EXTCOL` geplant), **selbstmodifizierender Code** als `label+1`
 - Ausgabe als lesbares Listing **oder** als wieder assemblierbarer Quelltext (`--asm`, byte-genau)
-- Eingabe: PRG, P00, Raw (geplant: Datei aus einem **D64**/**T64**, Cartridge **CRT**); `m6510tool basic list` detokenisiert
+- Eingabe: PRG, P00, Raw und Dateien aus einem **D64**/**T64** (`dis disk.d64:SPIEL`), Bänke einer Cartridge über
+  `m6510tool crt extract`; `m6510tool basic list` detokenisiert
   BASIC-Programme
 
 **Emulator** (`m6510::Cpu`, [docs/emulator.md](docs/emulator.md)) – *fertig*
@@ -53,7 +54,7 @@ Images und Entpacken sind geplant:
 - **geprüft** gegen Tom Hartes Einzelbefehls-Tests (2 440 000 Fälle: Register, Speicher, Zyklen; 0 Abweichungen) und Klaus
   Dormanns Funktionstest, beide in der CI ([docs/testing.md](docs/testing.md))
 
-**Commodore 64** ([docs/c64.md](docs/c64.md)) – *fertig bis auf Images*
+**Commodore 64** ([docs/c64.md](docs/c64.md)) – *fertig*
 - Speicherkarte mit allen Konfigurationen von `$01` (BASIC/KERNAL/Zeichensatz-ROM, I/O), Farb-RAM, VIC-II/SID/CIA-Register als
   Speicher mit **Schreibprotokoll** und Registernamen; Rasterzeile und CIA-1-Timer A aus dem Zyklenzähler (Raster- und
   Timer-IRQs)
@@ -62,14 +63,16 @@ Images und Entpacken sind geplant:
   Repository) lassen sich laden
 - **Bildschirm als Bild** (alle Text- und Bitmap-Modi, Rahmen, Scrolling, VIC-Bank; selbst gezeichneter Ersatzzeichensatz ohne
   ROM; Paletten Colodore/Pepto) als PNG für ein Modell, das Bilder versteht; Sprites sind eine Idee
-- geplant: T64, D64, CRT (0.6). Fertig: PRG, P00, eigenes Snapshot-Format
+- **Images:** D64 (35/40 Spuren, Fehlerbytes), T64 (mit den üblichen Fehlern), CRT; Cartridges vom Typ 0 (8K, 16K, Ultimax)
+  laufen in der Maschine, `LOAD` liest aus einem D64/T64; `m6510tool d64|t64|crt` (geprüft gegen `c1541` aus VICE).
+  Dazu PRG, P00 und ein eigenes Snapshot-Format
 
 **Agenten-Schnittstelle** (`m6510tool serve`, [docs/agent-protocol.md](docs/agent-protocol.md)) – *fertig*
 - JSON-Zeilenprotokoll mit denselben Befehlsnamen wie `z80tool serve` und `m68ktool serve`: assemblieren, disassemblieren,
   Speicher, Register, Lauf/`call`, Breakpoints, Watchpoints, Checkpoints mit Rollback und Speicher-Diff, Snapshots,
   KERNAL-Aufrufe, I/O-Protokoll, Screenshots; Dateizugriff nur mit `--allow-files`
 
-**Reverse Engineering** ([docs/reverse-engineering.md](docs/reverse-engineering.md)) – *fertig bis auf das Entpacken*
+**Reverse Engineering** ([docs/reverse-engineering.md](docs/reverse-engineering.md)) – *fertig*
 - Codefluss-Analyse mit Routinen und Aufrufgraph, Sprungtabellen (auch der `RTS`-Trick und getrennte Low-/High-Byte-Tabellen),
   Datentypen (PETSCII, Bildschirmcodes, Sprites, Zeichensätze), Annotationen und ein **verifiziertes Listing**: aus den echten
   Bytes erzeugt, neu assembliert und Byte für Byte verglichen

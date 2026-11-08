@@ -1,7 +1,8 @@
 # Benutzung von `m6510tool`
 
-> **Stand 0.4:** `asm`, `dis`, `basic list`, `monitor` und `serve` sind umgesetzt. `d64`, `t64`, `crt` und die
-> Disassembler-Eingabe aus Images sind die Spezifikation für die Meilensteine 0.5–0.6. Optionen orientieren
+> **Stand 0.6:** alle Befehle sind umgesetzt: `asm`, `dis`, `basic list`, `monitor`, `serve`, `d64`, `t64`, `crt`. Überall,
+> wo ein Programm gelesen wird (`dis`, `basic list`, `monitor`, `serve`), holt `disk.d64:NAME` bzw. `band.t64:NAME` eine
+> Datei aus einem Image (Muster mit `*` und `?` wie auf dem C64; ohne Namen die erste Datei). Optionen orientieren
 > sich an `z80tool` und `m68ktool`, damit man zwischen den Projekten nicht umlernen muss.
 
 ```sh
@@ -66,17 +67,24 @@ Ladeadresse. Ein BASIC-Starter, wie ihn `.BASIC` erzeugt, erscheint als `.BASIC 
 m6510tool basic list prog.prg        # detokenisiertes Listing
 ```
 
-## `d64`, `t64`, `crt` – Images (geplant, 0.6)
+## `d64`, `t64`, `crt` – Images
 
 ```sh
-m6510tool d64 info  disk.d64                 # Name, ID, freie Blöcke, Fehlerbytes
-m6510tool d64 ls    disk.d64                 # Verzeichnis
-m6510tool d64 extract disk.d64 "NAME" [-o datei.prg]
+m6510tool d64 info  disk.d64                 # Name, ID, DOS-Typ, Spuren, Fehlerbytes, freie Blöcke, Dateien
+m6510tool d64 ls    disk.d64                 # Verzeichnis wie LOAD"$",8 (Blöcke, Name, Typ; * = nicht geschlossen, < = geschützt)
+m6510tool d64 extract disk.d64 "NAME" [-o datei.prg]   # Datei so, wie sie auf der Diskette steht (PRG mit Ladeadresse)
 m6510tool d64 boot  disk.d64 [-o datei.prg]  # erste Datei wie LOAD"*",8,1
-m6510tool d64 block disk.d64 spur sektor     # Hexdump eines Blocks
-m6510tool t64 ls|extract band.t64 …
-m6510tool crt info  modul.crt                # Typ, Leitungen, Chips/Bänke
+m6510tool d64 block disk.d64 spur sektor     # Hexdump eines Blocks (mit Fehlercode, wenn vorhanden)
+m6510tool t64 ls band.t64                    # Bandname, Dateien mit Adressbereich
+m6510tool t64 extract band.t64 "NAME" [-o datei.prg]
+m6510tool crt info  modul.crt                # Name, Hardwaretyp, Modus (8K/16K/Ultimax), CHIP-Pakete
+m6510tool crt extract modul.crt bank adresse [-o bank.bin]   # eine Bank für den Disassembler
+m6510tool dis disk.d64:SPIEL                 # direkt aus dem Image disassemblieren
 ```
+
+Probleme eines beschädigten Images (Schleifen in Ketten, falsche Blockzahlen, falsche Endadressen in T64-Dateien) erscheinen
+als `warning:` auf stderr; was sich lesen lässt, wird gelesen. Ein CRT vom Typ 0 läuft im Emulator
+(`load_file`, Monitor `l`); andere Typen lassen sich auflisten und bankweise extrahieren.
 
 ## `monitor` – interaktiver Monitor
 
