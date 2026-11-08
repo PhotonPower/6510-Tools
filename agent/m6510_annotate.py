@@ -807,7 +807,8 @@ class Tools:
             m = re.match(r"\s+([A-Z]{3}(?:\.W)?)\s+([^;]*)", line)
             if not m or "#" in m.group(2) or m.group(1) in ("JMP", "JSR") and "(" not in m.group(2):
                 continue
-            for h in re.findall(r"\$([0-9A-Fa-f]{2,4})\b", m.group(2)):
+            operand = re.sub(r"[A-Za-z_][A-Za-z0-9_]*\s*[+-]\s*\$?[0-9A-Fa-f]+", "", m.group(2))   # name+$40 is an offset, not an address
+            for h in re.findall(r"\$([0-9A-Fa-f]{2,4})\b", operand):
                 numeric.add(int(h, 16))
         # not the stack page, not the chips and ROMs, not the screen; zero page from $02 (the processor port is $00/$01)
         numeric = sorted(a for a in numeric if 2 <= a < 0x100 or 0x0200 <= a < 0x0400 or 0x0800 <= a < 0xA000 or 0xC000 <= a < 0xD000)

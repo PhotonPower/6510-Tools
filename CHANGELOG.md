@@ -23,6 +23,10 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
     Ausführung zeigt, bekommt eigene Routinen). KERNAL-Emulation: die Vektortabelle bei `$FD30` (Programme kopieren sie
     direkt), `$E544` (Bildschirm löschen) und `$E566` (Cursor nach Hause) nachgebildet. Gefunden an einem echten Spiel
     (Impossible Mission: Sprachausgabe über CIA-2-NMI, Vorspann kopiert die Vektoren aus dem ROM).
+  - Listing: Chipregister, KERNAL-Einsprünge und Farb-RAM behalten ihre Namen auch innerhalb eines analysierten Bereichs bis
+    `$FFFF`; vom Benutzer vergebene Namen gewinnen aber immer (Programme, die das ROM ausblenden und das RAM darunter nutzen).
+    Datenbereiche der Art `bytes` werden an Variablen, Sprungzielen und Kommentaren in eigene Zeilen geteilt.
+  - Vollständigkeitsprüfung des Orchestrators: Ausdrücke wie `COLRAM+$287` gelten nicht mehr als unbenannte Adresse.
   - Orchestrator: `--snapshot` mit `--from/--to`, `--hints` (ausgeführte Adressen), `--attach`; `analyze` mit `hints`,
     `executed` mit `addresses`; `m6510_drive.py` sperrt das Arbeitsverzeichnis je Befehl (mehrere Agenten parallel).
   - Tests `d64`, `t64`, `crt` (selbst gebaute Images, Hunderte Mutationen), `test_unpack.py` (Packer in Python, Entpacker in

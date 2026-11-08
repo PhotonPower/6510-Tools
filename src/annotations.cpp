@@ -30,7 +30,7 @@ const std::set<std::string>& systemNames() {
             const std::string r = C64::registerName(static_cast<Address>(a));
             if (!r.empty()) n.insert(upper(r));
         }
-        for (const char* r : {"S", "P", "PC", "SP"}) n.insert(r);
+        for (const char* r : {"S", "P", "PC", "SP", "COLRAM"}) n.insert(r);
         return n;
     }();
     return names;

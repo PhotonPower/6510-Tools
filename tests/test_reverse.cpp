@@ -314,6 +314,54 @@ table:  .FILL 20
         CHECK(has(r.text, "count:\n        .BYTE $00                       ; $" + hexDigits(sym(p, "counter"), 4) + ": how often main ran"));
     }
 
+    // ---- a range that covers the I/O and KERNAL areas: chips, KERNAL entries and colour RAM keep their names --------------
+    {
+        Memory mem;
+        AssemblerOptions o;
+        const AssemblyResult ar = assemble(" * = $C000\nmain: INC $D020\n STA $D850,X\n JSR $FFD2\n JSR $DD03\n RTS\n", o);
+        for (const Segment& seg : ar.segments) mem.load(seg.address, seg.bytes);
+        mem.write8(0xDD03, 0x60);  // RAM under the CIA (the program calls the register, which holds RTS)
+        Annotations ann;
+        DataRegion io;
+        io.address = 0xD000;
+        io.length = 0x3000;
+        io.name = "ram_d000";
+        CHECK(!ann.setData(io));
+        Analysis an(mem, 0xC000, 0x10000);
+        an.setDataBarrier([&ann](Address a) { return ann.dataCovering(a) != nullptr; });
+        an.addEntry(0xC000);
+        an.analyzeFlow();
+        CHECK(!an.isCode(0xDD03));
+        ListingOptions lo;
+        lo.from = 0xC000;
+        lo.to = 0x10000;
+        const ListingResult r = renderListing(mem, an, ann, lo);
+        CHECK(r.verified);
+        if (!r.verified) std::cerr << r.problem << "\n";
+        CHECK(has(r.text, "INC EXTCOL"));
+        CHECK(has(r.text, "STA COLRAM+$50,X"));
+        CHECK(has(r.text, "JSR CHROUT"));
+        CHECK(has(r.text, "JSR CI2DDRB") || has(r.text, "JSR C2DDRB"));
+        CHECK(!has(r.text, "data_D020"));
+        // a name the user gives wins (the program banks the ROM out and keeps a table there), in an excerpt as well
+        VariableDoc v;
+        v.address = 0xD850;
+        v.name = "row_colours";
+        v.size = 0x40;
+        CHECK(!ann.setVariable(v));
+        lo.to = 0xC00C;
+        const ListingResult e = renderListing(mem, an, ann, lo);
+        CHECK(e.verified);
+        CHECK(has(e.text, "STA row_colours,X"));
+        CHECK(has(e.text, "INC EXTCOL"));
+        // ... and inside a large plain region it gets a line and a label of its own
+        lo.to = 0x10000;
+        const ListingResult f = renderListing(mem, an, ann, lo);
+        CHECK(f.verified);
+        CHECK(has(f.text, "row_colours:"));
+        CHECK(has(f.text, "STA row_colours,X"));
+    }
+
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------
     {
         const Program p = build(R"(

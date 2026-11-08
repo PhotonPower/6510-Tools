@@ -67,6 +67,7 @@ private:
     [[nodiscard]] std::string nameFor(Address a) const;
     std::string labelExpr(Address a);
     std::string symExpr(Address a);
+    std::string systemName(Address a);
     void useEquate(const std::string& name, Address a);
     void collectReferences();
     void buildItems();
@@ -107,7 +108,34 @@ void Renderer::useEquate(const std::string& name, Address a) {
     equates_[a] = name;
 }
 
+std::string Renderer::systemName(Address a) {
+    // chip registers, KERNAL entries, RAM vectors and colour RAM keep their names even inside the analysed range (a program
+    // whose image reaches $D000-$FFFF still meets the chips and the ROM there), unless code was found at the address or the
+    // user named it (a program that banks the ROM out uses the RAM underneath: room_grid beats TKSA)
+    if (!o_.c64Names || an_.isCode(a) || ann_.nameAt(a)) return "";
+    for (const VariableDoc& v : ann_.variables())
+        if (a >= v.address && a < v.address + v.size) return "";
+    const auto& k = kernalSymbols();
+    if (const auto it = k.find(a); it != k.end() && isValidSymbolName(it->second)) {
+        useEquate(it->second, a);
+        return it->second;
+    }
+    if (a >= 0xD000 && a < 0xE000 && isBaseRegister(a)) {
+        const std::string r = C64::registerName(a);
+        if (!r.empty() && isValidSymbolName(r)) {
+            useEquate(r, a);
+            return r;
+        }
+    }
+    if (a >= 0xD800 && a < 0xDC00) {
+        useEquate("COLRAM", 0xD800);
+        return a == 0xD800 ? std::string("COLRAM") : "COLRAM+$" + hexDigits(a - 0xD800, 1);
+    }
+    return "";
+}
+
 std::string Renderer::symExpr(Address a) {
+    if (const std::string n = systemName(a); !n.empty()) return n;
     if (inList(a)) return labelExpr(a);
     if (const auto e = ann_.expressionFor(a)) {
         const std::string base = e->substr(0, e->find('+'));
@@ -153,7 +181,7 @@ void Renderer::collectReferences() {
     for (const auto& [a, in] : an_.code()) {
         if (!inList(a)) continue;
         if (in.target && inList(*in.target)) needLabel_.insert(*in.target);
-        if (in.reference && inList(*in.reference)) {
+        if (in.reference && inList(*in.reference) && systemName(*in.reference).empty()) {
             needLabel_.insert(*in.reference);
             if (in.mode == Mode::Absolute || in.mode == Mode::ZeroPage) scalarRefs_.insert(*in.reference);
         }
@@ -176,6 +204,8 @@ void Renderer::collectReferences() {
 }
 
 void Renderer::buildItems() {
+    equates_.clear();       // collectReferences only asked; the names in use are collected while the lines are written
+    equateNames_.clear();
     // where tables found by the analysis start (and which side they are)
     std::map<Address, std::pair<const JumpTable*, bool>> tableStarts;
     for (const JumpTable& t : an_.jumpTables()) {
@@ -216,6 +246,11 @@ void Renderer::buildItems() {
             it.region = region;
             it.hiSide = region->kind == DataKind::Lohi && region->partner == at && region->address != at;
             it.length = std::min<std::uint32_t>(region->length, o_.to - a);
+            if (region->kind == DataKind::Bytes) {
+                // plain bytes: a variable, a referenced address or a comment inside starts a line of its own (the rest
+                // continues as plain bytes), so that a named table inside a large region keeps its name
+                if (const auto b = boundaries.upper_bound(at); b != boundaries.end() && *b < a + it.length) it.length = *b - a;
+            }
         } else if (const auto ts = tableStarts.find(at); ts != tableStarts.end()) {
             const JumpTable& t = *ts->second.first;
             it.kind = Item::Table;
