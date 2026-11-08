@@ -1,8 +1,9 @@
 # Reverse Engineering mit lokalem LLM
 
-> **Stand 0.5:** Analyse, Sprungtabellen, Datentypen, Annotationen, verifiziertes Listing und Screenshots sind im Server
-> umgesetzt (`m6510tool serve`, [agent-protocol.md](agent-protocol.md#reverse-engineering-reverse-engineeringmd)); der
-> Orchestrator `agent/m6510_annotate.py` und `agent/m6510_drive.py` folgen im dritten Teil von 0.5. Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
+> **Stand 0.5:** umgesetzt – Analyse, Sprungtabellen, Datentypen, Annotationen, verifiziertes Listing und Screenshots im
+> Server (`m6510tool serve`, [agent-protocol.md](agent-protocol.md#reverse-engineering-reverse-engineeringmd)), der
+> Orchestrator `agent/m6510_annotate.py` und `agent/m6510_drive.py` (getestet gegen einen Mock-Ollama, noch nicht mit einem
+> echten Modell erprobt). D64 als Quelle kommt mit 0.6. Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
 > `agent/m68k_annotate.py` / `agent/m68k_drive.py` (Analyse, Sprungtabellen, Datentypen, Blindtest-Befunde) der
 > Schwesterprojekte. Was sich dort bewährt hat, wird übernommen; dieses Dokument nennt die 6510-spezifischen Teile.
 
@@ -39,14 +40,32 @@ Das Modell **kann den Code nicht verändern**. Es liefert nur Namen und Texte; d
 KERNAL-Namen, doppelte Namen) werden mit Erklärung abgewiesen. Jedes Experiment läuft auf einem Checkpoint und wird
 zurückgerollt (inklusive Farb-RAM, Bausteinregistern und KERNAL-Zustand).
 
-## Benutzung (geplant)
+## Benutzung
 
 ```sh
 python3 agent/m6510_annotate.py --prg spiel.prg --project spiel.m6510proj.json --out spiel_kommentiert.asm \
-        --lang Deutsch --model qwen3-vl:8b-instruct --log spiel.log.jsonl
-python3 agent/m6510_annotate.py --d64 disk.d64 --file "SPIEL" …     # Datei aus einem Diskettenabbild
+        --lang Deutsch --model qwen3-vl:8b-instruct --log spiel.log.jsonl --report luecken.md
 python3 agent/m6510_annotate.py --prg spiel.prg --dry-run            # Analyse ohne Modell: Reihenfolge, Tabellen, Token-Schätzung
+python3 agent/m6510_annotate.py --bin teil.bin --org 0xC000 --machine generic --entry 0xC000
 ```
+
+| Option | Wirkung |
+|---|---|
+| `--prg` / `--bin` + `--org` | Programm (PRG/P00; `--org` verschiebt) bzw. Raw-Datei an eine Adresse |
+| `--machine c64\|generic` | C64 mit KERNAL-Emulation (Standard) oder 64 KiB RAM ohne I/O |
+| `--entry` | Einstiegspunkte (mehrfach); Standard: `SYS`-Adresse des BASIC-Starters, sonst die Ladeadresse |
+| `--project`, `--out`, `--report`, `--log` | Projektdatei (wird nach jeder Routine gespeichert, beim Start geladen), Listing, Lückenbericht, Protokoll |
+| `--model`, `--refine-model` (mehrfach), `--refine-all`, `--refine-medium` | Modell des ersten Durchgangs, weitere Durchgänge für Routinen mit Lücken |
+| `--think`, `--max-tokens`, `--num-ctx`, `--temperature`, `--max-turns` | Modellparameter wie bei den Schwesterprojekten |
+| `--only` | nur diese Routine(n) |
+| `--no-auto-tables`, `--no-auto-data` | vorgeschlagene Zeigertabellen nicht verfolgen bzw. erkannte Daten nicht markieren |
+| `--lang` | Sprache der Kommentare |
+
+Werkzeuge des Modells: `get_listing`, `disassemble`, `read_memory` (mit PETSCII- und Bildschirmcode-Spalte), `run_routine`
+(Register, Speicher, `setup`-Routinen, `screenshot`, `as_interrupt`), `screenshot`, `reset_machine`, `name_label`,
+`document_routine`, `name_variable`, `mark_data` (alle Datenarten inklusive `lohi` mit `partner`), `add_comment`,
+`mark_constant`, `remove_annotation`, `finish_routine`. Ein Modell ohne Bildverständnis (Ollama meldet keine Fähigkeit
+`vision`) bekommt statt der Bilder den Bildschirm als Text.
 
 Wie bei den Schwesterprojekten: Routinen **von den Blättern zur Wurzel**, mehrere Durchgänge (schnelles Modell zuerst,
 gründliches für die Lücken), Projektdatei zum Abbrechen/Fortsetzen, Bericht am Ende, Standardmodell

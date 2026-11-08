@@ -21,6 +21,14 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   `jump_tables`, `data_regions`, `listing`, `ann_*`. Beispielprogramm `examples/c64/hello_c64.asm`. Tests `reverse`,
   `jumptable`, `datatypes` (Zufallsprogramme mit Zufallsannotationen: jedes Listing verifiziert).
   - `m6510::Machine` merkt sich den Bereich des zuletzt geladenen oder assemblierten Programms.
+- **Meilenstein 0.5, dritter Teil – Orchestrator:** `agent/m6510_annotate.py` (Ollama, Routinen von den Blättern zur Wurzel,
+  Werkzeuge mit `run_routine` samt KERNAL-Aufrufen, Bausteinzugriffen, `CHROUT`-Text, Bildschirmänderung und Screenshots für
+  Modelle mit Bildverständnis, Vollständigkeitsprüfung, Verfeinerungsdurchgänge, Projektdatei, Bericht, `--dry-run`) und
+  `agent/m6510_drive.py` (dieselben Werkzeuge, ein Schritt je Aufruf). Tests gegen einen Mock-Ollama (`tests/agent`, CTest
+  `agent`). Anleitung `docs/walkthrough.md` mit dem Beispielprogramm.
+  - `call` mit `frame` (`irq`, `rti`): Interrupt-Handler laufen mit dem passenden Stapelrahmen und kehren mit `RTI` zurück
+    (`Cpu::callInterrupt`).
+  - Listing-Option `equates:false` (kein Kopf, für Ausschnitte); `max_entries:0` bei `jump_tables`.
 - **Meilenstein 0.4 – Monitor** (`m6510::Monitor`, `m6510tool monitor`): klassische Eingabeschleife wie bei den
   Schwesterprojekten, Zahlen hexadezimal (`100.` dezimal, Präfixe, Symbole, `@`-Register): `d`, `m`/`m.s`, `e`/`e.w`, `f`,
   `c`, `t`, `h`, Assemble-Modus `a` (Labels, Zuweisungen, Direktiven), `r`, `n`, `o`, `u`, `g`, `ru`, `b`/`bc`/`w`, `limit`,

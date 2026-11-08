@@ -101,6 +101,10 @@ public:
     /// Calls a subroutine like JSR: pushes `returnAddress - 1`, sets pc and runs until pc == `returnAddress`
     /// with S back at its value before the call (only then the result is Returned).
     RunResult call(Address entry, Address returnAddress, std::uint64_t maxInstructions);
+    /// Calls an interrupt handler: pushes `returnAddress` and P (with B clear) like the processor does for an IRQ, and with
+    /// `kernalFrame` also A, X and Y like the KERNAL's IRQ entry at $FF48 does before it jumps through $0314. Runs until
+    /// pc == `returnAddress` with S back at its value before the call (then Returned). Registers and the I flag are not changed.
+    RunResult callInterrupt(Address entry, Address returnAddress, bool kernalFrame, std::uint64_t maxInstructions);
 
     // ---- debugging --------------------------------------------------------------------------------
     void addBreakpoint(Address a) { breakpoints_.insert(a); }

@@ -16,6 +16,9 @@ struct ListingOptions {
     bool verify = true;        ///< assemble the listing again and compare the bytes
     std::size_t maxChars = 0;  ///< 0 = unlimited; otherwise cut at a line boundary (the cut text is not verified)
     bool c64Names = true;      ///< KERNAL entries and chip registers by name (`CHROUT`, `EXTCOL`)
+    /// Title, `.CPU`, `NAME = $XXXX` lines and `* =`: needed to assemble the listing again; an excerpt for a reader can do
+    /// without them (they are left out only if `verify` is off).
+    bool equates = true;
 };
 
 struct ListingResult {

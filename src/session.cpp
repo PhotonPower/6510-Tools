@@ -479,6 +479,8 @@ struct Session::Impl {
     Json cmdCall() {
         const Address entry = address("addr");
         const Address ret = addressOr("return_address", kDefaultReturn);
+        const std::string frame = has("frame") ? text("frame") : "jsr";
+        if (frame != "jsr" && frame != "irq" && frame != "rti") throw SessionError("frame must be jsr, irq or rti");
         setRegsFrom(arg("regs"));
         if (const Json* m = arg("memory"); m && !m->isNull()) {
             if (!m->isObject()) throw SessionError("'memory' must be an object {\"address\": \"hex bytes\"}");
@@ -490,7 +492,8 @@ struct Session::Impl {
         }
         const std::uint64_t irqs = s.m_.cpu().interruptCount();
         const Byte s0 = s.m_.cpu().registers().s;
-        const RunResult rr = s.m_.cpu().call(entry, ret, limit());
+        const RunResult rr = frame == "jsr" ? s.m_.cpu().call(entry, ret, limit())
+                                            : s.m_.cpu().callInterrupt(entry, ret, frame == "irq", limit());
         Json j = runReply(rr, irqs);
         const bool returned = rr.reason == StopReason::Returned;
         j.set("returned", returned);

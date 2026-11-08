@@ -1,6 +1,6 @@
 # Emulator
 
-> **Stand 0.3:** Prozessorkern (`m6510::Cpu`), Snapshots, die JSON-Sitzung (`m6510tool serve`,
+> **Stand 0.5:** Prozessorkern (`m6510::Cpu`), Snapshots, die JSON-Sitzung (`m6510tool serve`,
 > [agent-protocol.md](agent-protocol.md)) und die C64-Maschine mit KERNAL-Emulation ([c64.md](c64.md)) sind umgesetzt und
 > geprüft: alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte und Klaus Dormanns Funktionstest bestehen.
 
@@ -41,6 +41,7 @@ Die Namen folgen den Schwesterprojekten, damit Sitzung, Monitor und Orchestrator
 | `runUntilReturn(n)` | bis die laufende Routine zurückkehrt (Aufruftiefe: `JSR`/Interrupts zählen, `RTS`/`RTI` zählen ab) |
 | `stepOver(n)` | wie `step()`, aber `JSR` läuft bis zur Rückkehr |
 | `call(einstieg, rücksprung, n)` | stapelt `rücksprung − 1` (wie `JSR`) und läuft bis `pc == rücksprung`; `Returned` nur, wenn `S` dann wieder den Wert vor dem Aufruf hat (sonst `Reached`) |
+| `callInterrupt(einstieg, rücksprung, kernalRahmen, n)` | wie `call`, aber mit dem Stapelrahmen eines IRQ (`rücksprung`, `P` ohne `B`; mit `kernalRahmen` dazu `A`, `X`, `Y` wie beim IRQ-Einsprung `$FF48` des KERNAL): ein Interrupt-Handler kehrt mit `RTI` zurück (seit 0.5) |
 | `setIrq(aktiv)`, `nmi()` | IRQ-Leitung (Pegel) bzw. NMI-Flanke |
 | `portHook`, `setPortEnabled`, `setPortInputs` | Prozessorport: Rückruf bei Änderung der Ausgänge, abschalten (reiner 6502), Wert der Eingänge (Standard `$17`) |
 | `addBreakpoint`, `addWatchpoint(start, länge, lesen, schreiben)` | Haltepunkte; ein Watchpoint hält **nach** dem Befehl, der zugreift |

@@ -202,7 +202,8 @@ start:  RTS
 
     // ---- random images: guesses never overlap code or each other, the listing with them is verified ----------
     {
-        std::mt19937 rng(64);
+        std::mt19937 gen(64);
+        auto rng = [&gen]() { return static_cast<unsigned>(gen()); };
         for (int iter = 0; iter < 200; ++iter) {
             Memory mem;
             const Address from = 0x4000;

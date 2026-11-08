@@ -25,3 +25,11 @@ add_test(NAME cli_serve
 add_test(NAME cli_monitor
          COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSCRIPT=${PROJECT_SOURCE_DIR}/examples/monitor_session.txt
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_monitor.cmake)
+
+# The orchestrator tests need Python 3 (standard library only) and the m6510tool binary (docs/reverse-engineering.md).
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+  add_test(NAME agent
+           COMMAND ${CMAKE_COMMAND} -E env "M6510TOOL=$<TARGET_FILE:m6510tool>" ${Python3_EXECUTABLE} -W ignore -m unittest discover
+                   -s ${CMAKE_CURRENT_SOURCE_DIR}/agent)
+endif()

@@ -341,7 +341,8 @@ start:  NOP $12             ; undocumented
 
     // ---- random programs with random annotations: the listing is verified every time -------------------
     {
-        std::mt19937 rng(6510);
+        std::mt19937 gen(6510);
+        auto rng = [&gen]() { return static_cast<unsigned>(gen()); };
         int verified = 0, runs = 0;
         for (int iter = 0; iter < 2000; ++iter) {
             Memory mem;

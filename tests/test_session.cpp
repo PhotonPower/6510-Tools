@@ -443,5 +443,20 @@ int main() {
         std::remove("m6510_session_test.ann.json");
     }
 
+    // call with an interrupt frame: RTI returns to the return address
+    {
+        Session s;
+        call(s, R"({"cmd":"asm","origin":"0xC000","source":"rti_h: INC $10\n RTI\nirq_h: INC $10\n PLA\n TAY\n PLA\n TAX\n PLA\n RTI"})");
+        Json r = call(s, R"({"cmd":"call","addr":"rti_h","frame":"rti"})");
+        CHECK(r.find("returned")->asBool());
+        r = call(s, R"({"cmd":"call","addr":"irq_h","frame":"irq","regs":{"A":1,"X":2,"Y":3}})");
+        CHECK(r.find("returned")->asBool());
+        CHECK_EQ(str(*r.find("regs"), "X"), std::string("0x02"));
+        CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0x10","len":1})"), "hex"), std::string("02"));
+        r = call(s, R"({"cmd":"call","addr":"rti_h"})");  // as a subroutine: RTI pulls the wrong things
+        CHECK(!r.find("returned")->asBool());
+        CHECK(!ok(call(s, R"({"cmd":"call","addr":"rti_h","frame":"nmi"})")));
+    }
+
     return finish("session");
 }

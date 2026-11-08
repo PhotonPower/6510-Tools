@@ -6,9 +6,10 @@
 
 ## Wo wir stehen
 
-**Meilensteine 0.2 bis 0.4 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
+**Meilensteine 0.2 bis 0.5 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
 (2,44 Mio. Einzelbefehls-Tests ohne Abweichung, Dormanns Funktionstest), Snapshots, `m6510tool serve`, C64-Maschine und
-KERNAL-Emulation (0.3); Monitor (0.4). Als Nächstes: Meilenstein 0.5 (Reverse Engineering).
+KERNAL-Emulation (0.3); Monitor (0.4); Bildschirm als Bild, Analyse, verifiziertes Listing und Orchestrator für ein lokales
+Modell (0.5). Als Nächstes: Meilenstein 0.6 (Disk-, Tape- und Cartridge-Images, Entpacken).
 
 ## Meilenstein 0.2 – Opcode-Tabelle, Dekoder, Assembler, Disassembler (erledigt)
 
@@ -58,7 +59,13 @@ und Sitzung gemeinsam benutzen. Zusätzlich: `run` (Start wie `RUN`/`SYS`), `con
 - `m6510::Monitor` und `m6510tool monitor` mit den Befehlen aus [monitor.md](monitor.md) (wie bei den
   Schwesterprojekten, ergänzt um C64-Befehle: `bank`, `rom`, `io`, `kernal`, `screen`)
 
-## Meilenstein 0.5 – Reverse Engineering
+## Meilenstein 0.5 – Reverse Engineering (erledigt)
+
+Umgesetzt wie unten beschrieben, mit diesen Abweichungen: Sprites werden im Bild noch nicht gezeigt (Idee); `bitmap`/`colors`
+als Datenarten sind eine Idee. Zusätzlich: Interrupt-Handler, die das Programm über `$0314`/`$0318`/`$FFFE`/… einträgt,
+werden Einstiegspunkte und laufen in `run_routine` mit Interrupt-Rahmen (`call` mit `frame`); Zeiger in Immediate-Paaren
+(`LDA #<text / LDY #>text`) erscheinen im Listing als `#<name`/`#>name`. Die Erprobung mit einem echten Modell steht noch aus
+(wie bei den Schwesterprojekten).
 
 - `Analysis` (Codefluss, Routinen, Aufrufgraph, KERNAL-Aufrufe, I/O-Zugriffe), `Annotations`, **verifiziertes Listing**
 - Protokollbefehle `analyze`, `routines`, `references`, `listing`, `jump_tables`, `data_regions`, `ann_*`

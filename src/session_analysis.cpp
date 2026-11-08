@@ -290,7 +290,7 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
 
     if (cmd == "jump_tables") {
         const Analysis& an = needAnalysis();
-        const auto maxEntries = static_cast<std::size_t>(number("max_entries", 64, 1, 4096));
+        const auto maxEntries = static_cast<std::size_t>(number("max_entries", 64, 0, 4096));
         Json arr = Json::array();
         for (const JumpTable& t : an.jumpTables()) {
             Json e = Json::object().set("kind", kindName(t.kind));
@@ -380,6 +380,7 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         lo.verify = flag("verify", true);
         lo.maxChars = static_cast<std::size_t>(number("max_chars", 0, 0, 100'000'000));
         lo.c64Names = m_.c64() != nullptr;
+        lo.equates = flag("equates", true);
         if (lo.from < an.from() || lo.to > an.to() || lo.to <= lo.from)
             throw AnalysisError("the range must lie inside the analysed range " + hex4(an.from()) + "-" + hex4(an.to() - 1));
         const ListingResult r = renderListing(*analysisView_, an, ann, lo);

@@ -255,7 +255,8 @@ lone:   .WORD case1, case2
 
     // ---- random dispatchers: n cases, every case found, the listing verified ------------------------------------
     {
-        std::mt19937 rng(1234);
+        std::mt19937 gen(1234);
+        auto rng = [&gen]() { return static_cast<unsigned>(gen()); };
         for (int iter = 0; iter < 60; ++iter) {
             const unsigned n = 1 + rng() % 12;
             const int style = static_cast<int>(rng() % 3);  // 0 RTS split, 1 RTS words, 2 JMP (vector) split
