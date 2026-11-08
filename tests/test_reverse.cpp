@@ -428,6 +428,25 @@ table:  .FILL 20
         const ListingResult h = renderListing(m3, an3, ann, lo);
         CHECK(h.verified);
         CHECK(has(h.text, "STA jump_vec+1"));
+        // a table of words that point at named data shows the names
+        DataRegion ptrs;
+        ptrs.address = 0xC200;
+        ptrs.length = 4;
+        ptrs.kind = DataKind::Words;
+        ptrs.name = "record_ptrs";
+        m3.write8(0xC200, 0x10);
+        m3.write8(0xC201, 0xC1);
+        m3.write8(0xC202, 0x34);
+        m3.write8(0xC203, 0x12);
+        DataRegion rec;
+        rec.address = 0xC110;
+        rec.length = 4;
+        rec.name = "record_0";
+        CHECK(!ann.setData(ptrs));
+        CHECK(!ann.setData(rec));
+        const ListingResult w = renderListing(m3, an3, ann, lo);
+        CHECK(w.verified);
+        CHECK(has(w.text, ".WORD record_0,$1234"));
     }
 
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------

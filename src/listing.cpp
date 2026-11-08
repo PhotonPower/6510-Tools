@@ -424,7 +424,16 @@ std::vector<std::string> Renderer::renderItem(const Item& it, unsigned& userComm
                     std::vector<std::string> v;
                     for (unsigned i = 0; i + 1 < n; i += 2) {
                         const auto w = static_cast<Address>(byteAt(i) | (byteAt(i + 1) << 8));
-                        if (r.kind == DataKind::Words) v.push_back(h4(w));
+                        if (r.kind == DataKind::Words) {
+                            // a word that is exactly the address of something the user named (a table of pointers to
+                            // data: room records, lists) shows that name; other words stay numbers
+                            if (inList(w) && ann_.nameAt(w) && (an_.isCode(w) || !an_.at(w))) {
+                                labelUsed_.insert(w);
+                                v.push_back(nameFor(w));
+                            } else {
+                                v.push_back(h4(w));
+                            }
+                        }
                         else if (r.kind == DataKind::Pointers) v.push_back(tableEntry(w, false, w));
                         else v.push_back(tableEntry(static_cast<Address>(w + 1), true, w));
                     }
