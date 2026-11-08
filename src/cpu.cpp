@@ -1,5 +1,7 @@
 #include "m6510/cpu.hpp"
 
+#include <algorithm>
+
 #include <array>
 #include <cstring>
 
@@ -459,6 +461,7 @@ Byte Cpu::read(Address a) {
 }
 
 void Cpu::write(Address a, Byte v) {
+    if (tracking_) written_[a] = 1;
     if (accessHook) accessHook(a, v, true);
     for (const Watch& w : watches_) {
         if (w.onWrite && static_cast<Address>(a - w.start) < w.length) {
@@ -556,6 +559,10 @@ RunResult Cpu::runLoop(std::uint64_t maxInstructions, std::optional<Address> unt
         }
         if (until && r_.pc == *until && (!untilStack || r_.s == *untilStack)) {
             res.reason = StopReason::Reached;
+            return res;
+        }
+        if (watchWritten_ && inWrittenCode(r_.pc)) {
+            res.reason = StopReason::WrittenCode;
             return res;
         }
         if (n > 0 && breakpoints_.count(r_.pc)) {
@@ -683,6 +690,55 @@ RunResult Cpu::callInterrupt(Address entry, Address returnAddress, bool kernalFr
         else --depth_;
     }
     return res;
+}
+
+void Cpu::trackWrites(bool on) {
+    tracking_ = on;
+    if (on) written_.assign(0x10000, 0);
+    else {
+        written_.clear();
+        watchWritten_ = false;
+    }
+}
+
+std::size_t Cpu::writtenBytes() const {
+    std::size_t n = 0;
+    for (const std::uint8_t w : written_) n += w;
+    return n;
+}
+
+std::vector<std::pair<Address, std::uint32_t>> Cpu::writtenRanges(std::size_t minLength) const {
+    std::vector<std::pair<Address, std::uint32_t>> out;
+    if (!tracking_) return out;
+    std::uint32_t a = 0;
+    while (a < 0x10000) {
+        if (!written_[a]) {
+            ++a;
+            continue;
+        }
+        std::uint32_t e = a;
+        while (e < 0x10000 && written_[e]) ++e;
+        if (e - a >= minLength) out.emplace_back(static_cast<Address>(a), e);
+        a = e;
+    }
+    return out;
+}
+
+void Cpu::watchWrittenCode(bool on, std::size_t minLength, std::vector<std::pair<Address, std::uint32_t>> ignore) {
+    watchWritten_ = on && tracking_;
+    watchMin_ = std::max<std::size_t>(1, minLength);
+    watchIgnore_ = std::move(ignore);
+}
+
+bool Cpu::inWrittenCode(Address pc) const {
+    if (!written_[pc]) return false;
+    for (const auto& [first, end] : watchIgnore_)
+        if (pc >= first && pc < end) return false;
+    // is the written range around pc at least watchMin_ bytes long? (scans at most that far in each direction)
+    std::size_t n = 1;
+    for (std::uint32_t a = pc; a > 0 && written_[a - 1] && n < watchMin_; --a) ++n;
+    for (std::uint32_t a = pc + 1u; a < 0x10000 && written_[a] && n < watchMin_; ++a) ++n;
+    return n >= watchMin_;
 }
 
 CpuState Cpu::state() const {

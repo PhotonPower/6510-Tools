@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,14 @@ bool looksLikeP00(const std::vector<Byte>& file);
 
 /// Loads a program file by its contents/extension: P00 (signature), else PRG.
 Program loadProgramFile(const std::string& path);
+
+/// Like loadProgramFile, but also takes a file out of a disk or tape image: "disk.d64:NAME", "tape.t64:NAME"
+/// (patterns with `*` and `?` as on the C64), or "disk.d64" alone for the first program. `description`
+/// (optional) receives where it came from ("disk.d64: \"NAME\" (PRG, 12 blocks)").
+Program loadProgramSpec(const std::string& spec, std::string* description = nullptr);
+/// Splits "image.d64:NAME" into ("image.d64", "NAME"); for an image without a name the name is "*", for
+/// anything else nullopt.
+std::optional<std::pair<std::string, std::string>> splitImageSpec(const std::string& spec);
 
 /// Copies the program into memory at its load address.
 void loadProgram(Memory& memory, const Program& program);

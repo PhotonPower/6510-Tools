@@ -60,6 +60,7 @@ const char* stopName(StopReason r) {
         case StopReason::Returned: return "returned";
         case StopReason::Halted: return "halted";
         case StopReason::Requested: return "exit";
+        case StopReason::WrittenCode: return "unpacked";
     }
     return "?";
 }
@@ -187,6 +188,7 @@ struct Session::Impl {
         if (cmd == "set") return cmdSet();
         if (cmd == "step" || cmd == "step_over" || cmd == "run" || cmd == "run_until_return") return cmdRun(cmd);
         if (cmd == "call") return cmdCall();
+        if (cmd == "track_writes" || cmd == "written" || cmd == "run_until_unpacked" || cmd == "save_memory") return cmdUnpack(cmd);
         if (cmd == "run_program") return cmdRunProgram();
         if (cmd == "break" || cmd == "unbreak") {
             const Address a = address("addr");
@@ -236,7 +238,7 @@ struct Session::Impl {
     Json help() const {
         Json list = Json::array();
         for (const char* c : {"asm", "dis", "read", "write", "load_file", "load_rom", "attach", "regs", "set", "step",
-                              "step_over", "run", "run_until_return", "call", "run_program", "break", "unbreak", "breaks",
+                              "step_over", "run", "run_until_return", "call", "track_writes", "written", "run_until_unpacked", "save_memory", "run_program", "break", "unbreak", "breaks",
                               "clear_breaks", "watch", "unwatch", "checkpoint", "rollback", "drop", "checkpoints", "diff",
                               "state", "set_state", "save_state", "load_state", "interrupt", "io", "kernalcalls", "console",
                               "keys", "screen", "screenshot", "screens", "screen_drop", "screen_diff", "analyze", "routines",
@@ -501,6 +503,95 @@ struct Session::Impl {
             j.set("note", "the PC reached the return address, but the stack pointer is " + hex2(s.m_.cpu().registers().s) +
                               " instead of " + hex2(s0) + ": this is not a return");
         }
+        return j;
+    }
+
+    // ---- self-extracting programs: which memory did the program write, and where does it jump into it ----
+    Json cmdUnpack(const std::string& cmd) {
+        Cpu& cpu = s.m_.cpu();
+        auto rangesJson = [&](std::size_t minLength, std::size_t most) {
+            auto ranges = cpu.writtenRanges(minLength);
+            std::stable_sort(ranges.begin(), ranges.end(), [](const auto& a, const auto& b) { return a.second - a.first > b.second - b.first; });
+            Json arr = Json::array();
+            for (std::size_t i = 0; i < ranges.size() && i < most; ++i) {
+                arr.push(Json::object().set("start", hex4(ranges[i].first)).set("end", hex4(ranges[i].second)).set("size", ranges[i].second - ranges[i].first));
+            }
+            return arr;
+        };
+        if (cmd == "track_writes") {
+            const bool on = flag("on", true);
+            if (on && (flag("clear", true) || !cpu.tracking())) cpu.trackWrites(true);
+            if (!on) cpu.trackWrites(false);
+            s.unpackIgnore_.clear();
+            s.lastUnpackHit_.reset();
+            return ok().set("tracking", cpu.tracking());
+        }
+        if (cmd == "written") {
+            const std::int64_t minLength = number("min_length", 16);
+            const std::int64_t most = number("limit", 20);
+            if (minLength < 1 || minLength > 0x10000) throw SessionError("min_length must be 1..65536");
+            if (most < 1 || most > 200) throw SessionError("limit must be 1..200");
+            return ok().set("tracking", cpu.tracking()).set("bytes", cpu.writtenBytes())
+                .set("ranges", rangesJson(static_cast<std::size_t>(minLength), static_cast<std::size_t>(most)));
+        }
+        if (cmd == "save_memory") {
+            needFiles();
+            const Address a = address("addr");
+            const std::int64_t len = number("len", 0);
+            if (len < 1 || a + len > 0x10000) throw SessionError("len must be 1.. and addr + len at most 0x10000");
+            const std::string view = has("view") ? text("view") : "cpu";
+            const std::string format = has("format") ? text("format") : "prg";
+            if (view != "cpu" && view != "ram") throw SessionError("view must be cpu or ram");
+            if (format != "prg" && format != "raw") throw SessionError("format must be prg or raw");
+            std::vector<Byte> bytes;
+            for (std::int64_t i = 0; i < len; ++i) {
+                const auto x = static_cast<Address>(a + i);
+                bytes.push_back(view == "ram" ? s.m_.memory().read8(x) : peek(x));
+            }
+            const std::string file = text("file");
+            writeBinaryFile(file, format == "prg" ? makePrg(a, bytes) : bytes);
+            return ok().set("file", file).set("addr", hex4(a)).set("bytes", len).set("format", format);
+        }
+        // run_until_unpacked
+        const std::int64_t minWritten = number("min_written", 4096);
+        if (minWritten < 1 || minWritten > 0x10000) throw SessionError("min_written must be 1..65536");
+        std::vector<std::pair<Address, std::uint32_t>> ignore;
+        if (const Json* extra = arg("ignore"); extra && !extra->isNull()) {
+            if (!extra->isArray()) throw SessionError("ignore must be a list of [first, end] pairs");
+            for (const Json& pair : extra->items()) {
+                if (!pair.isArray() || pair.items().size() != 2) throw SessionError("ignore must be a list of [first, end] pairs");
+                const std::int64_t e = value(pair.items()[1], "ignore");
+                if (e < 0 || e > 0x10000) throw SessionError("ignore: the end must be 0..0x10000");
+                ignore.emplace_back(static_cast<Address>(value(pair.items()[0], "ignore") & 0xFFFF), static_cast<std::uint32_t>(e));
+            }
+        }
+        const std::uint64_t n = has("max_instructions") ? limit() : std::uint64_t{50'000'000};
+        if (!flag("continue", false) || !cpu.tracking()) {
+            cpu.trackWrites(true);
+            s.unpackIgnore_.clear();
+            s.lastUnpackHit_.reset();
+        } else if (s.lastUnpackHit_) {
+            s.unpackIgnore_.push_back(*s.lastUnpackHit_);  // the stage that was found last does not count again
+        }
+        ignore.insert(ignore.end(), s.unpackIgnore_.begin(), s.unpackIgnore_.end());
+        ignore.emplace_back(0x0000, 0x0200);  // zero page and stack: work areas, not results
+        const std::uint64_t irqs = cpu.interruptCount();
+        cpu.watchWrittenCode(true, static_cast<std::size_t>(minWritten), ignore);
+        const RunResult r = cpu.run(n);
+        cpu.watchWrittenCode(false);
+        Json j = runReply(r, irqs);
+        if (r.reason == StopReason::WrittenCode) {
+            const Address pc = cpu.registers().pc;
+            for (const auto& [first, end] : cpu.writtenRanges(1)) {
+                if (pc >= first && pc < end) {
+                    s.lastUnpackHit_ = std::make_pair(first, end);
+                    j.set("region", Json::object().set("start", hex4(first)).set("end", end == 0x10000 ? std::string("0x10000") : hex4(end))
+                                        .set("size", end - first));
+                    break;
+                }
+            }
+        }
+        j.set("written_bytes", cpu.writtenBytes()).set("ranges", rangesJson(64, 8));
         return j;
     }
 

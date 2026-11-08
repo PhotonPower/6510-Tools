@@ -67,6 +67,8 @@ private:
     std::unique_ptr<Analysis> analysis_;
     std::set<Address> analysisEntries_;
     std::vector<std::pair<Address, std::uint32_t>> linearRanges_;
+    std::vector<std::pair<Address, std::uint32_t>> unpackIgnore_;      // stages found by run_until_unpacked (continue:true skips them)
+    std::optional<std::pair<Address, std::uint32_t>> lastUnpackHit_;
     std::map<std::string, IndexedImage> screens_;  // named screenshots (full screen) for screen_diff
 };
 

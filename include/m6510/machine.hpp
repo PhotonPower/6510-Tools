@@ -28,6 +28,7 @@ struct LoadedFile {
     Program program;
     Address entry = 0;  ///< load address, or the SYS target of a BASIC starter at $0801
     std::string basic;  ///< first BASIC line ("10 SYS 2064") if there is a starter
+    std::string source; ///< where it came from, for messages ("disk.d64: \"NAME\" (PRG, 12 blocks)")
 };
 
 /// One emulated machine as the session (`m6510tool serve`) and the monitor use it: memory, processor,
@@ -69,11 +70,15 @@ public:
 
     /// Loads a ROM image ("basic", "kernal", "char"); a real KERNAL replaces the emulation (CPU reset).
     void loadRom(const std::string& which, const std::vector<Byte>& image);
-    /// Files that the emulated KERNAL's LOAD reads: a .prg/.p00 file (answers every name) or a directory.
+    /// Inserts a CRT cartridge (hardware type 0) and resets; see loadFile.
+    LoadedFile insertCartridge(const std::string& path);
+    /// Files that the emulated KERNAL's LOAD reads: a .prg/.p00 file (answers every name), a directory, or a
+    /// D64/T64 image (LOAD"NAME",8 searches its directory; `*` and `?` work as on the C64).
     void attach(const std::string& path);
     [[nodiscard]] const std::string& attached() const { return attached_; }
     /// Loads a program file into RAM and sets the PC to its entry. `type`: auto, prg, p00, raw (raw needs
-    /// `address`; for prg/p00 it overrides the load address).
+    /// `address`; for prg/p00 it overrides the load address), d64/t64 (or a path "image.d64:NAME"), crt (inserts the
+    /// cartridge and resets; PC = its cold start or reset vector).
     LoadedFile loadFile(const std::string& path, const std::string& type = "auto",
                         std::optional<Address> address = std::nullopt);
 

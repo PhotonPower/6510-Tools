@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <stdexcept>
 
+#include "m6510/crt.hpp"
 #include "m6510/petscii.hpp"
 
 namespace m6510 {
@@ -126,6 +127,19 @@ void Machine::attach(const std::string& path) {
     namespace fs = std::filesystem;
     if (!fs::exists(path)) throw std::runtime_error("'" + path + "' does not exist");
     attached_ = path;
+    const std::string ext = fileExtension(path);
+    if (ext == ".d64" || ext == ".t64") {
+        (void)loadProgramSpec(path);  // a damaged image is reported now, not at the first LOAD
+        kernal_->files = [path](const std::string& name, unsigned device) -> std::optional<Program> {
+            if (device < 8 && fileExtension(path) == ".d64") return std::nullopt;
+            try {
+                return loadProgramSpec(path + ":" + (name.empty() ? "*" : name));
+            } catch (const IoError&) {
+                return std::nullopt;
+            }
+        };
+        return;
+    }
     kernal_->files = [path](const std::string& name, unsigned device) -> std::optional<Program> {
         if (device < 8) return std::nullopt;
         try {
@@ -151,27 +165,34 @@ void Machine::attach(const std::string& path) {
 
 LoadedFile Machine::loadFile(const std::string& path, const std::string& requestedType, std::optional<Address> address) {
     std::string type = requestedType;
-    const std::vector<Byte> data = readBinaryFile(path);
+    LoadedFile out;
+    Program& p = out.program;
+    if (type == "auto" && splitImageSpec(path)) type = "image";
+    if (type == "auto" && fileExtension(path) == ".crt") type = "crt";
+    if (type == "d64" || type == "t64" || type == "image") {
+        p = loadProgramSpec(path, &out.source);
+        if (address) p.address = *address;
+        type = "image";
+    } else if (type == "crt") {
+        return insertCartridge(path);
+    }
+    const std::vector<Byte> data = type == "image" ? std::vector<Byte>{} : readBinaryFile(path);
     if (type == "auto") {
         const std::string ext = fileExtension(path);
         if (looksLikeP00(data)) type = "p00";
         else if (ext == ".bin" || ext == ".raw") type = "raw";
-        else if (ext == ".d64" || ext == ".t64" || ext == ".crt") type = ext.substr(1);
         else type = "prg";
     }
-    LoadedFile out;
-    Program& p = out.program;
-    if (type == "raw") {
+    if (type == "image") {
+    } else if (type == "raw") {
         if (!address) throw std::runtime_error("a raw file needs a load address");
         p.address = *address;
         p.bytes = data;
     } else if (type == "prg" || type == "p00") {
         p = type == "prg" ? parsePrg(data) : parseP00(data);
         if (address) p.address = *address;
-    } else if (type == "d64" || type == "t64" || type == "crt") {
-        throw std::runtime_error(type + " images are planned for milestone 0.6 (docs/roadmap.md)");
     } else {
-        throw std::runtime_error("unknown type '" + type + "' (auto, raw, prg, p00)");
+        throw std::runtime_error("unknown type '" + type + "' (auto, raw, prg, p00, d64, t64, crt)");
     }
     if (p.end() > 0x10000) throw std::runtime_error("the program does not fit below $FFFF");
     loadProgram(*memory_, p);
@@ -187,6 +208,41 @@ LoadedFile Machine::loadFile(const std::string& path, const std::string& request
     }
     cpu_->registers().pc = out.entry;
     cpu_->setHalted(false);
+    return out;
+}
+
+LoadedFile Machine::insertCartridge(const std::string& path) {
+    if (!c64_) throw std::runtime_error("a cartridge needs the C64 machine");
+    const CrtImage crt(readBinaryFile(path));
+    if (crt.hardwareType() != 0)
+        throw std::runtime_error("the cartridge is of type " + std::to_string(crt.hardwareType()) + " (" + crt.hardwareName() +
+                                 "): only normal 8K/16K/Ultimax cartridges (type 0) can be inserted; `m6510tool crt` lists its banks");
+    std::vector<Byte> roml, romh;
+    for (const CrtChip& c : crt.chips()) {
+        if (c.bank != 0) continue;
+        if (c.load == 0x8000) {
+            roml.assign(c.data.begin(), c.data.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(c.data.size(), 0x2000)));
+            if (c.data.size() > 0x2000) romh.assign(c.data.begin() + 0x2000, c.data.end());  // a 16K chip at $8000
+        } else if (c.load == 0xA000 || c.load == 0xE000) {
+            romh = c.data;
+        }
+    }
+    if (romh.size() > 0x2000) romh.resize(0x2000);
+    c64_->insertCartridge(roml, romh, !crt.exrom(), !crt.game());
+    reset(false);
+    LoadedFile out;
+    out.program.address = 0x8000;
+    out.program.bytes = roml;
+    out.source = path + ": \"" + crt.name() + "\" (" + crt.mode() + " cartridge)";
+    const auto word = [this](Address a) { return static_cast<Address>(peek(a) | (peek(static_cast<Address>(a + 1)) << 8)); };
+    if (c64_->ultimax()) {
+        cpu_->reset();  // the cartridge's own reset vector at $FFFC
+    } else if (peek(0x8004) == 0xC3 && peek(0x8005) == 0xC2 && peek(0x8006) == 0xCD && peek(0x8007) == 0x38 && peek(0x8008) == 0x30) {
+        cpu_->registers().pc = word(0x8000);  // "CBM80": the KERNAL would jump to the cold start vector of the cartridge
+    }
+    cpu_->setHalted(false);
+    out.entry = cpu_->registers().pc;
+    programRange = std::make_pair(Address{0x8000}, static_cast<std::uint32_t>(0x8000 + std::max<std::size_t>(roml.size(), 1)));
     return out;
 }
 

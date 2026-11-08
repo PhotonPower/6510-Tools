@@ -24,26 +24,10 @@ constexpr const char* kCia2Names[16] = {"CI2PRA", "CI2PRB", "C2DDRA", "C2DDRB", 
 }  // namespace
 
 C64::C64(Memory& ram, Cpu& cpu) : ram_(ram), cpu_(cpu) {
-    cpu_.readOverride = [this](Address a, Byte& v) {
-        if (a >= 0xA000 && a < 0xC000) {
-            if (!basicVisible()) return false;
-            v = basic_[a - 0xA000];
-            return true;
-        }
-        if (a >= 0xD000 && a < 0xE000) {
-            if (ioVisible()) return readIo(a, v);
-            if (!charVisible()) return false;
-            v = char_[a - 0xD000];
-            return true;
-        }
-        if (a >= 0xE000 && kernalVisible()) {
-            v = kernal_[a - 0xE000];
-            return true;
-        }
-        return false;
-    };
+    cpu_.readOverride = [this](Address a, Byte& v) { return readMapped(a, v, true); };
     cpu_.writeOverride = [this](Address a, Byte v) {
         if (a >= 0xD000 && a < 0xE000 && ioVisible()) return writeIo(a, v);
+        if (ultimax() && ((a >= 0x1000 && a < 0x8000) || (a >= 0xA000 && a < 0xD000))) return true;  // not connected
         return false;  // RAM, also underneath ROM
     };
     cpu_.portHook = [this](Byte, Byte) { config_ = static_cast<Byte>(cpu_.portValue() & 7); };
@@ -73,11 +57,73 @@ void C64::loadRom(const std::string& which, const std::vector<Byte>& image) {
     }
 }
 
+bool C64::readMapped(Address a, Byte& v, bool effects) {
+    const bool loram = (config_ & 1) != 0, hiram = (config_ & 2) != 0;
+    auto rom = [](const std::vector<Byte>& r, Address x) { return r.empty() ? Byte{0xFF} : r[(x & 0x1FFF) % r.size()]; };
+    if (ultimax()) {
+        if (a >= 0x8000 && a < 0xA000) { v = rom(roml_, a); return true; }
+        if (a >= 0xE000) { v = rom(romh_, a); return true; }
+        if (a >= 0xD000 && a < 0xE000) return readIo(a, v, effects);
+        if ((a >= 0x1000 && a < 0x8000) || (a >= 0xA000 && a < 0xD000)) { v = 0xFF; return true; }  // not connected (simplified)
+        return false;
+    }
+    if (cartExrom_ && a >= 0x8000 && a < 0xA000 && loram && hiram) {
+        v = rom(roml_, a);
+        return true;
+    }
+    if (a >= 0xA000 && a < 0xC000) {
+        if (cartExrom_ && cartGame_) {
+            if (!hiram) return false;
+            v = rom(romh_, a);
+            return true;
+        }
+        if (!basicVisible()) return false;
+        v = basic_[a - 0xA000];
+        return true;
+    }
+    if (a >= 0xD000 && a < 0xE000) {
+        if (ioVisible()) return readIo(a, v, effects);
+        if (!charVisible()) return false;
+        v = char_[a - 0xD000];
+        return true;
+    }
+    if (a >= 0xE000 && kernalVisible()) {
+        v = kernal_[a - 0xE000];
+        return true;
+    }
+    return false;
+}
+
+void C64::insertCartridge(std::vector<Byte> roml, std::vector<Byte> romh, bool exrom, bool game) {
+    if (roml.size() > 0x2000 || romh.size() > 0x2000) throw std::invalid_argument("a cartridge ROM is at most 8 KiB");
+    roml_ = std::move(roml);
+    romh_ = std::move(romh);
+    cartExrom_ = exrom;
+    cartGame_ = game;
+}
+
+void C64::removeCartridge() {
+    roml_.clear();
+    romh_.clear();
+    cartExrom_ = cartGame_ = false;
+}
+
+std::string C64::cartridgeMode() const {
+    if (cartExrom_ && !cartGame_) return "8K";
+    if (cartExrom_ && cartGame_) return "16K";
+    if (cartGame_) return "Ultimax";
+    return "none";
+}
+
 std::string C64::describeConfig() const {
-    std::string a = basicVisible() ? "BASIC" : "RAM";
-    std::string d = ioVisible() ? "I/O" : charVisible() ? "CHAR" : "RAM";
-    std::string e = kernalVisible() ? "KERNAL" : "RAM";
-    return "$A000:" + a + " $D000:" + d + " $E000:" + e;
+    const bool loram = (config_ & 1) != 0, hiram = (config_ & 2) != 0;
+    std::string out;
+    if (ultimax()) out = "$8000:ROML ";
+    else if (cartExrom_ && loram && hiram) out = "$8000:ROML ";
+    std::string a = basicVisible() ? "BASIC" : (cartExrom_ && cartGame_ && hiram) ? "ROMH" : ultimax() ? "-" : "RAM";
+    std::string d = ultimax() ? "I/O" : ioVisible() ? "I/O" : charVisible() ? "CHAR" : "RAM";
+    std::string e = ultimax() ? "ROMH" : kernalVisible() ? "KERNAL" : "RAM";
+    return out + "$A000:" + a + " $D000:" + d + " $E000:" + e;
 }
 
 void C64::write(Address a, Byte v) {
@@ -117,16 +163,8 @@ unsigned C64::timerA() const {
 
 Byte C64::peek(Address a) const {
     if (cpu_.portEnabled() && a < 2) return a == 0 ? cpu_.portDirection() : cpu_.portValue();
-    if (a >= 0xA000 && a < 0xC000 && basicVisible()) return basic_[a - 0xA000];
-    if (a >= 0xD000 && a < 0xE000) {
-        if (ioVisible()) {
-            Byte v = 0;
-            const_cast<C64*>(this)->readIo(a, v, false);  // without side effects
-            return v;
-        }
-        if (charVisible()) return char_[a - 0xD000];
-    }
-    if (a >= 0xE000 && kernalVisible()) return kernal_[a - 0xE000];
+    Byte v = 0;
+    if (const_cast<C64*>(this)->readMapped(a, v, false)) return v;  // without side effects
     return ram_.read8(a);
 }
 

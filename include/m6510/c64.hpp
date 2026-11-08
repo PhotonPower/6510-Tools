@@ -48,11 +48,20 @@ public:
     std::array<Byte, 0x2000>& kernalRomForEmulation() { return kernal_; }
     void setKernalPresent(bool on) { hasKernal_ = on; }
 
+    // ---- cartridge (CRT hardware type 0: 8K, 16K, Ultimax) ------------------------------------------
+    /// Inserts a cartridge: ROML (at $8000) and ROMH (at $A000, or $E000 in Ultimax mode), each at most 8 KiB, and the
+    /// EXROM/GAME lines (true = active, i.e. low). 8K: EXROM; 16K: EXROM and GAME; Ultimax: GAME only.
+    void insertCartridge(std::vector<Byte> roml, std::vector<Byte> romh, bool exrom, bool game);
+    void removeCartridge();
+    [[nodiscard]] bool ultimax() const { return cartGame_ && !cartExrom_; }
+    /// "none", "8K", "16K" or "Ultimax".
+    [[nodiscard]] std::string cartridgeMode() const;
+
     // ---- memory configuration ------------------------------------------------------------------
     /// LORAM/HIRAM/CHAREN as the processor port drives them (bits 0-2).
     [[nodiscard]] Byte config() const { return config_; }
-    [[nodiscard]] bool basicVisible() const { return hasBasic_ && (config_ & 3) == 3; }
-    [[nodiscard]] bool kernalVisible() const { return hasKernal_ && (config_ & 2) != 0; }
+    [[nodiscard]] bool basicVisible() const { return hasBasic_ && (config_ & 3) == 3 && !cartGame_; }
+    [[nodiscard]] bool kernalVisible() const { return hasKernal_ && (config_ & 2) != 0 && !ultimax(); }
     [[nodiscard]] bool ioVisible() const { return (config_ & 3) != 0 && (config_ & 4) != 0; }
     [[nodiscard]] bool charVisible() const { return hasChar_ && (config_ & 3) != 0 && (config_ & 4) == 0; }
     /// What the processor sees at `address` (no side effects).
@@ -112,6 +121,9 @@ private:
     std::array<Byte, 0x1000> char_{};
     bool hasBasic_ = false, hasKernal_ = false, hasChar_ = false;
     State s_;
+    std::vector<Byte> roml_, romh_;
+    bool cartExrom_ = false, cartGame_ = false;  // lines active
+    bool readMapped(Address a, Byte& v, bool effects);
     Byte& config_ = s_.config;
     std::array<Byte, 0x400>& color_ = s_.color;
     std::array<Byte, 0x40>& vic_ = s_.vic;
