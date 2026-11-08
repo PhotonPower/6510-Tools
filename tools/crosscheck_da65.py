@@ -17,8 +17,8 @@ import subprocess
 import sys
 import tempfile
 
-# our name -> da65 name (where they differ)
-DA65_NAMES = {"SBX": "axs"}
+# our name -> da65 name (where they differ; same opcodes, other names)
+DA65_NAMES = {"SBX": "axs", "ANE": "xaa", "SHA": "ahx", "LXA": "lax", "USBC": "sbc"}
 
 
 def load_forms(dump_forms):

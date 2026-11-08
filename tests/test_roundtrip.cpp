@@ -100,7 +100,7 @@ int main() {
                 }
             }
             for (int k = 0; k < 256; ++k) {
-                const unsigned w = rng() & 0xFFFF;
+                const auto w = static_cast<unsigned>(rng() & 0xFFFF);
                 mem.write8(pc + 1, static_cast<Byte>(w));
                 mem.write8(pc + 2, static_cast<Byte>(w >> 8));
                 check(mem, pc, k % 4 == 0);

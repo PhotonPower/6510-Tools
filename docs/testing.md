@@ -58,12 +58,12 @@ python3 tools/crosscheck_da65.py build/m6510_dump_forms
 
 | Prüfung | Werkzeug | Was wird verglichen | Skript | Stand |
 |---|---|---|---|---|
-| Assembler (und Opcode-Tabelle) | `ca65`+`ld65` (cc65, `--cpu 6502X`) | für jede Vorzugsform der Tabelle ein Befehl mit typischem Operanden, dazu die erzwungen absoluten Formen (`LDA.W $0012` = `lda a:$0012`): gleiche Bytes und der erwartete Opcode | `tools/crosscheck_ca65.py` | CI-Job `crosscheck` |
+| Assembler (und Opcode-Tabelle) | `ca65`+`ld65` (cc65, `--cpu 6502X`) | für jede Vorzugsform der Tabelle ein Befehl mit typischem Operanden, dazu die erzwungen absoluten Formen (`LDA.W $0012` = `lda a:$0012`): gleiche Bytes und der erwartete Opcode | `tools/crosscheck_ca65.py` | CI-Job `crosscheck`: 274 Fälle, 0 Abweichungen (`LXA`, `USBC` kennt ca65 nicht) |
 | Dekoder | `da65` (cc65, `--cpu 6502x`) | alle 256 Opcodes einzeln: Mnemonic, Adressierungsart (aus der Operandenschreibweise), Länge; ein dokumentierter Opcode, den da65 nicht kennt, ist ein Fehler | `tools/crosscheck_da65.py` | CI-Job `crosscheck` |
 | D64-Leser | `c1541` (VICE) | Zufallsdisketten: Verzeichnis und Dateien byte-genau | `tools/crosscheck_d64.py` | geplant (0.6) |
 
 `tools/dump_forms.cpp` (`m6510_dump_forms`, mit `-DM6510_BUILD_TOOLS=ON`) gibt die Opcode-Tabelle für die Skripte aus.
-Bewusste Unterschiede zählen die Skripte getrennt: Namen (`SBX` heißt bei cc65 `AXS`) werden umgesetzt; Befehle, die cc65
+Bewusste Unterschiede zählen die Skripte getrennt: Namen werden umgesetzt (cc65: `SBX` = `AXS`; da65 zusätzlich `ANE` = `XAA`, `SHA` = `AHX`, `LXA` = `LAX #`, `USBC` = `SBC` mit `$EB`); Befehle, die cc65
 nicht kennt, erscheinen als „not supported“ bzw. „.byte in da65“ und lassen die Prüfung nur dann scheitern, wenn es
 dokumentierte Opcodes sind. Die CI schreibt die Zusammenfassung beider Prüfungen als Hinweis in die Zusammenfassung des Laufs.
 

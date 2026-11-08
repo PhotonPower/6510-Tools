@@ -198,7 +198,7 @@ int main() {
         for (int round = 0; round < 300 && failures < 3; ++round) {
             Memory m;
             const Address start = static_cast<Address>(0x0800 + (rng() % 0x8000));
-            const std::uint32_t len = 16 + rng() % 400;
+            const auto len = static_cast<std::uint32_t>(16 + rng() % 400);
             for (std::uint32_t i = 0; i < len; ++i) m.write8(static_cast<Address>(start + i), static_cast<Byte>(rng()));
             const CpuLevel level = static_cast<CpuLevel>(round % 3);
             Disassembler dis(m, start, start + len, level);
