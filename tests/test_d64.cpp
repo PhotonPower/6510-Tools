@@ -22,6 +22,7 @@ std::vector<Byte> pattern(std::size_t n, unsigned seed) {
 std::string tempFile(const std::string& name) { return (std::filesystem::temp_directory_path() / name).string(); }
 
 Json call(Session& s, const std::string& line) { return Json::parse(s.handleLine(line)); }
+Json callJson(Session& s, const Json& request) { return s.handle(request); }
 
 }  // namespace
 
@@ -222,14 +223,14 @@ int main() {
         so.allowFiles = true;
         Session s(so);
         call(s, R"({"cmd":"machine","type":"c64"})");
-        Json r = call(s, R"({"cmd":"load_file","file":")" + path + R"(","name":"T*"})");
+        Json r = callJson(s, Json::object().set("cmd", "load_file").set("file", path).set("name", "T*"));  // Windows paths need JSON escaping
         CHECK(r.find("ok")->asBool());
         CHECK_EQ(r.find("start")->asString(), std::string("0xC000"));
         CHECK(r.find("source")->asString().find("TOOL") != std::string::npos);
-        r = call(s, R"({"cmd":"load_file","file":")" + path + R"(:GAME"})");
+        r = callJson(s, Json::object().set("cmd", "load_file").set("file", path + ":GAME"));
         CHECK_EQ(r.find("start")->asString(), std::string("0x0801"));
         // LOAD"TOOL",8,1 through the KERNAL emulation from the attached disk
-        CHECK(call(s, R"({"cmd":"attach","file":")" + path + R"("})").find("ok")->asBool());
+        CHECK(callJson(s, Json::object().set("cmd", "attach").set("file", path)).find("ok")->asBool());
         call(s, R"({"cmd":"write","addr":"0xC000","hex":"00"})");
         call(s, R"({"cmd":"asm","origin":"0x2000","source":"go: LDA #4\n LDX #<n\n LDY #>n\n JSR SETNAM\n LDA #1\n LDX #8\n LDY #1\n JSR SETLFS\n LDA #0\n JSR LOAD\n RTS\nn: .BYTE \"TOOL\""})");
         r = call(s, R"({"cmd":"run_program","addr":"go"})");

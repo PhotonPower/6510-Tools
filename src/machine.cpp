@@ -127,8 +127,8 @@ void Machine::attach(const std::string& path) {
     namespace fs = std::filesystem;
     if (!fs::exists(path)) throw std::runtime_error("'" + path + "' does not exist");
     attached_ = path;
-    const std::string ext = fileExtension(path);
-    if (ext == ".d64" || ext == ".t64") {
+    const std::string imageExt = fileExtension(path);
+    if (imageExt == ".d64" || imageExt == ".t64") {
         (void)loadProgramSpec(path);  // a damaged image is reported now, not at the first LOAD
         kernal_->files = [path](const std::string& name, unsigned device) -> std::optional<Program> {
             if (device < 8 && fileExtension(path) == ".d64") return std::nullopt;

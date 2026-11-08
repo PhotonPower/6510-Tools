@@ -152,7 +152,9 @@ int main() {
         SessionOptions so;
         so.allowFiles = true;
         Session s(so);
-        CHECK(!Json::parse(s.handleLine(R"({"cmd":"load_file","file":")" + path + R"("})")).find("ok")->asBool());  // generic machine
+        const Json r = s.handle(Json::object().set("cmd", "load_file").set("file", path));
+        CHECK(!r.find("ok")->asBool());  // the generic machine has no cartridge port
+        CHECK(r.find("error")->asString().find("C64") != std::string::npos);
         std::remove(path.c_str());
     }
 
