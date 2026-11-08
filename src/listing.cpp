@@ -209,7 +209,7 @@ void Renderer::collectReferences() {
         }
     }
     for (const auto& [a, p] : an_.pointerImmediates())
-        if (inList(a) && inList(p.first) && !namedRegionInside(p.first)) needLabel_.insert(p.first);
+        if (inList(a) && inList(p.first) && !namedRegionInside(p.first) && systemName(p.first).empty()) needLabel_.insert(p.first);
     for (const JumpTable& t : an_.jumpTables()) {
         if (!t.followed) continue;
         for (const Address target : t.targets)
