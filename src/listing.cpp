@@ -68,6 +68,7 @@ private:
     std::string labelExpr(Address a);
     std::string symExpr(Address a);
     std::string systemName(Address a);
+    const DataRegion* namedRegionInside(Address a) const;
     void useEquate(const std::string& name, Address a);
     void collectReferences();
     void buildItems();
@@ -90,7 +91,20 @@ std::string Renderer::nameFor(Address a) const {
     return "data_" + hexDigits(a, 4);
 }
 
+const DataRegion* Renderer::namedRegionInside(Address a) const {
+    // an address inside (not at the start of) a named data region without a name of its own: it is written as
+    // region+offset and gets no label of its own (no data_XXXX in the middle of a named table)
+    const DataRegion* r = ann_.dataCovering(a);
+    if (!r || r->name.empty() || r->address == a || r->kind == DataKind::Lohi || ann_.nameAt(a) || ann_.variableAt(a)) return nullptr;
+    return r;
+}
+
 std::string Renderer::labelExpr(Address a) {
+    if (const DataRegion* r = namedRegionInside(a)) {
+        labelUsed_.insert(r->address);
+        const unsigned off = a - r->address;
+        return nameFor(r->address) + "+" + (off < 10 ? std::to_string(off) : "$" + hexDigits(off, 1));
+    }
     auto it = items_.upper_bound(a);
     if (it == items_.begin()) return h4(a);
     --it;
@@ -186,13 +200,13 @@ void Renderer::collectReferences() {
     for (const auto& [a, in] : an_.code()) {
         if (!inList(a)) continue;
         if (in.target && inList(*in.target)) needLabel_.insert(*in.target);
-        if (in.reference && inList(*in.reference) && systemName(*in.reference).empty()) {
+        if (in.reference && inList(*in.reference) && systemName(*in.reference).empty() && !namedRegionInside(*in.reference)) {
             needLabel_.insert(*in.reference);
             if (in.mode == Mode::Absolute || in.mode == Mode::ZeroPage) scalarRefs_.insert(*in.reference);
         }
     }
     for (const auto& [a, p] : an_.pointerImmediates())
-        if (inList(a) && inList(p.first)) needLabel_.insert(p.first);
+        if (inList(a) && inList(p.first) && !namedRegionInside(p.first)) needLabel_.insert(p.first);
     for (const JumpTable& t : an_.jumpTables()) {
         if (!t.followed) continue;
         for (const Address target : t.targets)

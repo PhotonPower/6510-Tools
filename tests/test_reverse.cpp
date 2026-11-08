@@ -393,6 +393,23 @@ table:  .FILL 20
         CHECK(f.verified);
         CHECK(has(f.text, "row_colours:"));
         CHECK(has(f.text, "STA row_colours,X"));
+        // an operand pointing into the middle of a named table: name+offset, no data_XXXX label inside the table
+        DataRegion tab;
+        tab.address = 0xC100;
+        tab.length = 0x100;
+        tab.name = "speech_table";
+        CHECK(!ann.setData(tab));
+        Memory m2 = mem;
+        const AssemblyResult a2 = assemble(" * = $C000\n LDA $C110\n RTS\n", o);
+        for (const Segment& seg : a2.segments) m2.load(seg.address, seg.bytes);
+        Analysis an2(m2, 0xC000, 0x10000);
+        an2.setDataBarrier([&ann](Address x) { return ann.dataCovering(x) != nullptr; });
+        an2.addEntry(0xC000);
+        an2.analyzeFlow();
+        const ListingResult g = renderListing(m2, an2, ann, lo);
+        CHECK(g.verified);
+        CHECK(has(g.text, "LDA speech_table+$10"));
+        CHECK(!has(g.text, "data_C110"));
     }
 
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------
