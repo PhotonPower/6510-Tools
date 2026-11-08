@@ -113,13 +113,18 @@ std::string Renderer::systemName(Address a) {
     // whose image reaches $D000-$FFFF still meets the chips and the ROM there), unless code was found at the address or the
     // user named it (a program that banks the ROM out uses the RAM underneath: room_grid beats TKSA)
     if (!o_.c64Names || an_.isCode(a) || ann_.nameAt(a)) return "";
+    bool covered = false;
     for (const VariableDoc& v : ann_.variables())
-        if (a >= v.address && a < v.address + v.size) return "";
+        covered = covered || (a >= v.address && a < v.address + v.size);
     const auto& k = kernalSymbols();
+    // a KERNAL jump table entry stays itself even inside a table the program keeps in the RAM underneath (JSR SETLFS, not
+    // JSR room_grid+$24: the program calls the ROM with the ROM banked in)
+    if (covered && !(a >= 0xFF81 && a < 0xFFF6)) return "";
     if (const auto it = k.find(a); it != k.end() && isValidSymbolName(it->second)) {
         useEquate(it->second, a);
         return it->second;
     }
+    if (covered) return "";
     if (a >= 0xD000 && a < 0xE000 && isBaseRegister(a)) {
         const std::string r = C64::registerName(a);
         if (!r.empty() && isValidSymbolName(r)) {

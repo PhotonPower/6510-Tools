@@ -476,8 +476,13 @@ class Tools:
         first, end = max(first, lo), min(last + 1, hi)   # `to` is inclusive; the listing command wants the end
         if end <= first:
             raise ValueError(f"the range lies outside the analysed program (0x{lo:04X}-0x{hi - 1:04X})")
+        end = min(max(end, last + 3), hi)   # the instruction at `to` complete (a 3-byte instruction would else be bytes)
         r = self.s.ok(cmd="listing", verify=False, equates=False, addresses=True, max_chars=24000, **{"from": f"0x{first:04X}", "to": f"0x{end:X}"})
-        return r["listing"] + ("\n[listing truncated]" if r.get("truncated") else "")
+        if not r.get("truncated"):
+            return r["listing"]
+        shown = re.findall(r";\s*\$([0-9A-F]{4})", r["listing"])
+        cont = f"; continue with from=0x{int(shown[-1], 16) + 1:04X}" if shown else ""
+        return r["listing"] + f"\n[listing TRUNCATED (too long){cont}]"
 
     def t_disassemble(self, addr, count=16):
         r = self.s.ok(cmd="dis", addr=norm_addr(addr), count=max(1, min(int(count), 200)))

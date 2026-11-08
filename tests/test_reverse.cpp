@@ -114,6 +114,32 @@ int main() {
         CHECK(!a.setData(l));
         CHECK(a.dataAt(0xC203) != nullptr);  // the partner side
         CHECK(a.dataCovering(0xC205) != nullptr);
+        // a placeholder (plain bytes without a name) is split around a named region inside it
+        DataRegion ph;
+        ph.address = 0xE000;
+        ph.length = 0x2000;
+        ph.comment = "RAM under the KERNAL";
+        CHECK(!a.setData(ph));
+        DataRegion grid;
+        grid.address = 0xFF96;
+        grid.length = 54;
+        grid.name = "room_grid";
+        CHECK(!a.setData(grid));
+        CHECK_EQ(a.dataAt(0xE000)->length, 0x1F96U);
+        CHECK_EQ(a.dataAt(0xE000)->comment, std::string("RAM under the KERNAL"));
+        CHECK_EQ(a.dataAt(0xFF96)->name, std::string("room_grid"));
+        CHECK_EQ(a.dataAt(0xFFCC)->length, 0x34U);
+        CHECK(a.dataAt(0xFFCC)->comment.empty());
+        DataRegion head;                              // at the start of a placeholder: the rest stays a placeholder
+        head.address = 0xE000;
+        head.length = 0x10;
+        head.name = "head";
+        CHECK(!a.setData(head));
+        CHECK_EQ(a.dataAt(0xE010)->length, 0x1F86U);
+        DataRegion clash = grid;                      // a named region is not split
+        clash.address = 0xFF90;
+        clash.name = "other";
+        CHECK(a.setData(clash).has_value());
         CHECK(a.dataCovering(0xC206) == nullptr);
         a.setComment(0xC000, "hello");
         a.setBlockComment(0xC000, "block");
@@ -318,7 +344,7 @@ table:  .FILL 20
     {
         Memory mem;
         AssemblerOptions o;
-        const AssemblyResult ar = assemble(" * = $C000\nmain: INC $D020\n STA $D850,X\n JSR $FFD2\n JSR $DD03\n RTS\n", o);
+        const AssemblyResult ar = assemble(" * = $C000\nmain: INC $D020\n STA $D850,X\n JSR $FFD2\n JSR $DD03\n JSR $FFBA\n RTS\n", o);
         for (const Segment& seg : ar.segments) mem.load(seg.address, seg.bytes);
         mem.write8(0xDD03, 0x60);  // RAM under the CIA (the program calls the register, which holds RTS)
         Annotations ann;
@@ -354,6 +380,13 @@ table:  .FILL 20
         CHECK(e.verified);
         CHECK(has(e.text, "STA row_colours,X"));
         CHECK(has(e.text, "INC EXTCOL"));
+        VariableDoc grid;                          // a table in the RAM under the KERNAL jump table
+        grid.address = 0xFF96;
+        grid.name = "room_grid";
+        grid.size = 54;
+        CHECK(!ann.setVariable(grid));
+        lo.to = 0xC00F;
+        CHECK(has(renderListing(mem, an, ann, lo).text, "JSR SETLFS"));
         // ... and inside a large plain region it gets a line and a label of its own
         lo.to = 0x10000;
         const ListingResult f = renderListing(mem, an, ann, lo);
