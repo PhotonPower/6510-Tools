@@ -11,6 +11,7 @@
 #include "m6510/cpu.hpp"
 #include "m6510/json.hpp"
 #include "m6510/kernal.hpp"
+#include "m6510/machine.hpp"
 #include "m6510/memory.hpp"
 #include "m6510/snapshot.hpp"
 
@@ -38,35 +39,18 @@ public:
     /// Parses one line of JSON, handles it and returns the reply as a single line.
     std::string handleLine(std::string_view line);
 
-    [[nodiscard]] Cpu& cpu() { return *cpu_; }
-    [[nodiscard]] Memory& memory() { return *memory_; }
-    [[nodiscard]] C64* c64() { return c64_.get(); }
-    [[nodiscard]] Kernal* kernal() { return kernal_.get(); }
+    [[nodiscard]] Cpu& cpu() { return m_.cpu(); }
+    [[nodiscard]] Memory& memory() { return m_.memory(); }
+    [[nodiscard]] C64* c64() { return m_.c64(); }
+    [[nodiscard]] Kernal* kernal() { return m_.kernal(); }
+    [[nodiscard]] Machine& machine() { return m_; }
 
 private:
     struct Impl;
     friend struct Impl;
 
-    struct Watch {
-        Address start;
-        unsigned length;
-        bool read, write;
-    };
-
-    void selectMachine(bool c64, bool hle);
-    [[nodiscard]] Snapshot capture() const;
-    void restore(const Snapshot& s);
-    void applyWatches();
-
     SessionOptions options_;
-    std::unique_ptr<Memory> memory_;
-    std::unique_ptr<Cpu> cpu_;
-    std::unique_ptr<C64> c64_;        // null = generic machine
-    std::unique_ptr<Kernal> kernal_;  // null = no KERNAL emulation (generic machine or a real KERNAL ROM)
-    std::string attached_;            // file or directory that LOAD reads from
-    std::map<std::string, std::int64_t> symbols_;
-    std::map<std::string, Snapshot> checkpoints_;
-    std::vector<Watch> watches_;
+    Machine m_;
 };
 
 }  // namespace m6510

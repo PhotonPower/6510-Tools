@@ -6,9 +6,9 @@
 
 ## Wo wir stehen
 
-**Meilensteine 0.2 und 0.3 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
+**Meilensteine 0.2 bis 0.4 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
 (2,44 Mio. Einzelbefehls-Tests ohne Abweichung, Dormanns Funktionstest), Snapshots, `m6510tool serve`, C64-Maschine und
-KERNAL-Emulation (0.3). Als Nächstes: Meilenstein 0.4 (Monitor).
+KERNAL-Emulation (0.3); Monitor (0.4). Als Nächstes: Meilenstein 0.5 (Reverse Engineering).
 
 ## Meilenstein 0.2 – Opcode-Tabelle, Dekoder, Assembler, Disassembler (erledigt)
 
@@ -49,7 +49,11 @@ ist schon da, das Bild folgt mit 0.5.
   erkennen)
 - Testsuite von Wolfgang Lorenz auf der C64-Maschine (mit KERNAL-Emulation)
 
-## Meilenstein 0.4 – Monitor
+## Meilenstein 0.4 – Monitor (erledigt)
+
+Umgesetzt wie unten beschrieben, mit diesen Abweichungen: `shot` (Bildschirm als PNG) kommt mit dem Bild in 0.5, Laden aus
+D64/T64 mit den Images in 0.6. Maschine, Symbole, Checkpoints und Watchpoints liegen jetzt in `m6510::Machine`, die Monitor
+und Sitzung gemeinsam benutzen. Zusätzlich: `run` (Start wie `RUN`/`SYS`), `console`, `keys`, `irq on|off`.
 
 - `m6510::Monitor` und `m6510tool monitor` mit den Befehlen aus [monitor.md](monitor.md) (wie bei den
   Schwesterprojekten, ergänzt um C64-Befehle: `bank`, `rom`, `io`, `kernal`, `screen`)

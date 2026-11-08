@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
 #include <stdexcept>
 
 #include "m6510/assembler.hpp"
@@ -65,17 +64,6 @@ const char* stopName(StopReason r) {
     return "?";
 }
 
-// Screen code -> printable character for the text view of the screen.
-char screenChar(Byte sc) {
-    sc = static_cast<Byte>(sc & 0x7F);
-    if (sc == 0) return '@';
-    if (sc <= 26) return static_cast<char>('A' + sc - 1);
-    if (sc == 27) return '[';
-    if (sc == 29) return ']';
-    if (sc >= 32 && sc < 64) return static_cast<char>(sc);
-    return '.';
-}
-
 std::vector<Byte> parseHex(const std::string& text) {
     std::string digits;
     for (char c : text) {
@@ -103,32 +91,19 @@ struct Session::Impl {
         if (v.isNumber()) return v.asInt();
         if (v.isBool()) throw SessionError(what + ": expected a number or an expression, not a boolean");
         if (!v.isString()) throw SessionError(what + ": expected a number or an expression");
-        const Registers& r = s.cpu_->registers();
+        const Registers& r = s.m_.cpu().registers();
         const ExpressionEvaluator ev(
             [&](const std::string& name, std::int64_t& out) {
-                if (auto it = s.symbols_.find(name); it != s.symbols_.end()) {
-                    out = it->second;
-                    return true;
-                }
                 const std::string u = upper(name);
-                if (u == "A") out = r.a;
-                else if (u == "X") out = r.x;
-                else if (u == "Y") out = r.y;
-                else if (u == "S" || u == "SP") out = r.s;
-                else if (u == "P") out = r.p;
-                else if (u == "PC") out = r.pc;
-                else {
-                    if (s.c64_) {
-                        for (const auto& [a, n] : Kernal::jumpTable()) {
-                            if (n == u) {
-                                out = a;
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
+                if (s.m_.symbols.count(name) == 0) {  // registers by name unless a symbol has that name
+                    if (u == "A") { out = r.a; return true; }
+                    if (u == "X") { out = r.x; return true; }
+                    if (u == "Y") { out = r.y; return true; }
+                    if (u == "S" || u == "SP") { out = r.s; return true; }
+                    if (u == "P") { out = r.p; return true; }
+                    if (u == "PC") { out = r.pc; return true; }
                 }
-                return true;
+                return s.m_.lookupSymbol(name, out);
             },
             r.pc);
         const ExprResult x = ev.evaluate(v.asString());
@@ -166,17 +141,14 @@ struct Session::Impl {
         if (!s.options_.allowFiles) throw SessionError("file access is disabled (start the server with --allow-files)");
     }
     void needC64(const char* cmd) const {
-        if (!s.c64_) throw SessionError(std::string(cmd) + " needs the C64 machine (machine type c64)");
+        if (!s.m_.c64()) throw SessionError(std::string(cmd) + " needs the C64 machine (machine type c64)");
     }
 
-    Byte peek(Address a) const { return s.c64_ ? s.c64_->peek(a) : s.cpu_->peek(a); }
-    void poke(Address a, Byte v) const {
-        if (s.c64_) s.c64_->write(a, v);
-        else s.memory_->write8(a, v);
-    }
+    Byte peek(Address a) const { return s.m_.peek(a); }
+    void poke(Address a, Byte v) const { s.m_.poke(a, v); }
 
     Json regs() const {
-        const Cpu& c = *s.cpu_;
+        const Cpu& c = s.m_.cpu();
         const Registers& r = c.registers();
         Json j = Json::object();
         j.set("A", hex2(r.a)).set("X", hex2(r.x)).set("Y", hex2(r.y)).set("S", hex2(r.s)).set("PC", hex4(r.pc));
@@ -188,25 +160,15 @@ struct Session::Impl {
     Json runReply(const RunResult& rr, std::uint64_t interruptsBefore) const {
         Json j = Json::object();
         j.set("ok", true).set("stop", stopName(rr.reason)).set("instructions", rr.instructions).set("cycles", rr.cycles);
-        j.set("pc", hex4(s.cpu_->registers().pc));
-        j.set("interrupts", s.cpu_->interruptCount() - interruptsBefore);
+        j.set("pc", hex4(s.m_.cpu().registers().pc));
+        j.set("interrupts", s.m_.cpu().interruptCount() - interruptsBefore);
         if (rr.reason == StopReason::Watchpoint) j.set("watch", Json::object().set("addr", hex4(rr.watchAddress)));
-        if (rr.reason == StopReason::Requested) j.set("message", s.cpu_->stopMessage());
+        if (rr.reason == StopReason::Requested) j.set("message", s.m_.cpu().stopMessage());
         j.set("regs", regs());
         return j;
     }
 
-    std::map<Address, std::string> reverseSymbols() const {
-        std::map<Address, std::string> names;
-        if (s.c64_)
-            for (const auto& [a, n] : Kernal::jumpTable()) names[a] = n;
-        for (const auto& [n, v] : s.symbols_) {
-            if (v < 0 || v > 0xFFFF) continue;
-            auto it = names.find(static_cast<Address>(v));
-            if (it == names.end() || it->second.find('.') != std::string::npos) names[static_cast<Address>(v)] = n;
-        }
-        return names;
-    }
+    std::map<Address, std::string> reverseSymbols() const { return s.m_.reverseSymbols(); }
 
     // ---- commands ----------------------------------------------------------------------------------
     Json run() {
@@ -228,8 +190,8 @@ struct Session::Impl {
         if (cmd == "run_program") return cmdRunProgram();
         if (cmd == "break" || cmd == "unbreak") {
             const Address a = address("addr");
-            if (cmd == "break") s.cpu_->addBreakpoint(a);
-            else s.cpu_->removeBreakpoint(a);
+            if (cmd == "break") s.m_.cpu().addBreakpoint(a);
+            else s.m_.cpu().removeBreakpoint(a);
             return ok();
         }
         if (cmd == "breaks" || cmd == "clear_breaks") return cmdBreaks(cmd);
@@ -244,19 +206,19 @@ struct Session::Impl {
         if (cmd == "kernalcalls") return cmdKernalCalls();
         if (cmd == "console") {
             needC64("console");
-            return ok().set("text", s.kernal_ ? s.kernal_->takeConsole() : std::string());
+            return ok().set("text", s.m_.kernal() ? s.m_.kernal()->takeConsole() : std::string());
         }
         if (cmd == "keys") {
             needC64("keys");
-            if (!s.kernal_) throw SessionError("keys needs the KERNAL emulation");
-            s.kernal_->addKeys(text("text"));
+            if (!s.m_.kernal()) throw SessionError("keys needs the KERNAL emulation");
+            s.m_.kernal()->addKeys(text("text"));
             return ok();
         }
         if (cmd == "screen") return cmdScreen();
         if (cmd == "reset") return cmdReset();
         if (cmd == "symbols") {
             Json j = Json::object();
-            for (const auto& [n, v] : s.symbols_) j.set(n, hex4(static_cast<unsigned>(v)));
+            for (const auto& [n, v] : s.m_.symbols) j.set(n, hex4(static_cast<unsigned>(v)));
             return ok().set("symbols", j);
         }
         if (cmd == "machine") return cmdMachine();
@@ -279,9 +241,7 @@ struct Session::Impl {
     Json cmdAsm() {
         AssemblerOptions o;
         o.origin = addressOr("origin", 0xC000);
-        o.predefined = s.symbols_;
-        if (s.c64_)
-            for (const auto& [addr, n] : Kernal::jumpTable()) o.predefined.emplace(n, addr);  // JSR CHROUT
+        o.predefined = s.m_.assemblerSymbols();
         o.level = CpuLevel::Stable;
         const AssemblyResult r = assemble(text("source"), o);
         if (!r.ok()) {
@@ -308,13 +268,13 @@ struct Session::Impl {
         }
         Json segs = Json::array();
         for (const Segment& seg : r.segments) {
-            s.memory_->load(seg.address, seg.bytes);
+            s.m_.memory().load(seg.address, seg.bytes);
             segs.push(Json::object().set("start", hex4(seg.address)).set("size", seg.bytes.size()));
         }
         Json syms = Json::object();
         for (const auto& [n, v] : r.symbols) {
             if (o.predefined.count(n)) continue;
-            s.symbols_[n] = v;
+            s.m_.symbols[n] = v;
             syms.set(n, hex4(static_cast<unsigned>(v)));
         }
         Json j = ok();
@@ -323,15 +283,15 @@ struct Session::Impl {
         if (!flat.empty()) j.set("start", hex4(r.lowest())).set("end", hex4(r.end() - 1));
         j.set("segments", segs).set("symbols", syms);
         if (has("entry")) {
-            s.cpu_->registers().pc = address("entry");
-            s.cpu_->setHalted(false);
-            j.set("entry", hex4(s.cpu_->registers().pc));
+            s.m_.cpu().registers().pc = address("entry");
+            s.m_.cpu().setHalted(false);
+            j.set("entry", hex4(s.m_.cpu().registers().pc));
         }
         return j;
     }
 
     Json cmdDis() {
-        const Address start = addressOr("addr", s.cpu_->registers().pc);
+        const Address start = addressOr("addr", s.m_.cpu().registers().pc);
         const std::int64_t count = number("count", 8);
         if (count < 1 || count > 1000) throw SessionError("count must be 1..1000");
         Memory view;
@@ -369,12 +329,12 @@ struct Session::Impl {
         std::vector<Byte> b;
         for (std::int64_t i = 0; i < len; ++i) {
             const auto x = static_cast<Address>(a + i);
-            b.push_back(view == "ram" ? s.memory_->read8(x) : peek(x));
+            b.push_back(view == "ram" ? s.m_.memory().read8(x) : peek(x));
         }
         std::string ascii, pet;
         for (Byte c : b) {
             ascii += (c >= 0x20 && c < 0x7F) ? static_cast<char>(c) : '.';
-            pet += screenChar(c);
+            pet += screenCodeToChar(c);
         }
         return ok().set("addr", hex4(a)).set("hex", hexBytes(b)).set("ascii", ascii).set("screen", pet);
     }
@@ -400,102 +360,42 @@ struct Session::Impl {
 
     Json cmdLoadFile() {
         needFiles();
-        const std::string file = text("file");
-        std::string type = has("type") ? text("type") : "auto";
-        const std::vector<Byte> data = readBinaryFile(file);
-        if (type == "auto") {
-            const std::string ext = fileExtension(file);
-            if (looksLikeP00(data)) type = "p00";
-            else if (ext == ".bin" || ext == ".raw") type = "raw";
-            else if (ext == ".d64" || ext == ".t64" || ext == ".crt") type = ext.substr(1);
-            else type = "prg";
-        }
-        Program p;
-        if (type == "raw") {
-            p.address = address("addr");
-            p.bytes = data;
-            if (p.end() > 0x10000) throw SessionError("raw file does not fit between addr and $FFFF");
-        } else if (type == "prg") {
-            p = parsePrg(data);
-            if (has("addr")) p.address = address("addr");
-        } else if (type == "p00") {
-            p = parseP00(data);
-            if (has("addr")) p.address = address("addr");
-        } else if (type == "d64" || type == "t64" || type == "crt") {
-            throw SessionError(type + " images are planned for milestone 0.6 (docs/roadmap.md)");
-        } else {
-            throw SessionError("unknown type '" + type + "' (auto, raw, prg, p00)");
-        }
-        if (p.end() > 0x10000) throw SessionError("program does not fit below $FFFF");
-        loadProgram(*s.memory_, p);
-        Address entry = p.address;
+        const std::string type = has("type") ? text("type") : "auto";
+        const std::optional<Address> at = has("addr") ? std::optional<Address>(address("addr")) : std::nullopt;
+        const LoadedFile f = s.m_.loadFile(text("file"), type, at);
+        const Program& p = f.program;
         Json j = ok().set("start", hex4(p.address)).set("end", hex4(p.bytes.empty() ? p.address : p.end() - 1));
-        if (auto t = findSysTarget(*s.memory_, p.address); t && p.address == 0x0801) {
-            entry = *t;
-            std::string error;
-            const auto lines = detokenizeBasic(*s.memory_, p.address, &error, 3);
-            if (!lines.empty()) j.set("basic", std::to_string(lines[0].number) + " " + lines[0].text);
-        }
-        j.set("entry", hex4(entry));
-        s.cpu_->registers().pc = entry;
-        s.cpu_->setHalted(false);
+        if (!f.basic.empty()) j.set("basic", f.basic);
+        j.set("entry", hex4(f.entry));
         return j;
     }
 
     Json cmdLoadRom() {
         needFiles();
         needC64("load_rom");
-        const std::string which = text("which");
-        s.c64_->loadRom(which, readBinaryFile(text("file")));
-        if (which == "kernal") {
-            s.kernal_.reset();  // the real KERNAL replaces the emulation
-            s.cpu_->reset();
-        }
-        return ok().set("kernal", s.kernal_ ? "emulated" : "rom");
+        s.m_.loadRom(text("which"), readBinaryFile(text("file")));
+        return ok().set("kernal", s.m_.kernal() ? "emulated" : "rom");
     }
 
     Json cmdAttach() {
         needFiles();
         needC64("attach");
-        if (!s.kernal_) throw SessionError("attach needs the KERNAL emulation");
+        if (!s.m_.kernal()) throw SessionError("attach needs the KERNAL emulation");
         const std::string path = text("file");
-        namespace fs = std::filesystem;
-        if (!fs::exists(path)) throw SessionError("'" + path + "' does not exist");
-        s.attached_ = path;
-        s.kernal_->files = [path](const std::string& name, unsigned device) -> std::optional<Program> {
-            if (device < 8) return std::nullopt;
-            try {
-                if (fs::is_directory(path)) {
-                    std::vector<fs::path> prgs;
-                    for (const auto& e : fs::directory_iterator(path)) {
-                        if (e.is_regular_file() && (fileExtension(e.path().string()) == ".prg" || fileExtension(e.path().string()) == ".p00"))
-                            prgs.push_back(e.path());
-                    }
-                    std::sort(prgs.begin(), prgs.end());
-                    for (const fs::path& f : prgs) {
-                        const std::string stem = upper(f.stem().string());
-                        if (name == "*" || name.empty() || stem == upper(name)) return loadProgramFile(f.string());
-                    }
-                    return std::nullopt;
-                }
-                return loadProgramFile(path);  // a single file answers every name
-            } catch (const IoError&) {
-                return std::nullopt;
-            }
-        };
+        s.m_.attach(path);
         return ok().set("attached", path);
     }
 
     Json cmdSet() {
         const Json* r = arg("regs");
         if (!r || !r->isObject()) throw SessionError("set needs 'regs' (an object)");
-        Registers& g = s.cpu_->registers();
+        Registers& g = s.m_.cpu().registers();
         for (const auto& [name, v] : r->members()) {
             const std::string u = upper(name);
             const std::int64_t x = value(v, name);
             if (u == "PC") {
                 g.pc = static_cast<Address>(x & 0xFFFF);
-                s.cpu_->setHalted(false);
+                s.m_.cpu().setHalted(false);
                 continue;
             }
             if (x < -128 || x > 255) throw SessionError(name + ": value out of range for an 8-bit register");
@@ -504,14 +404,19 @@ struct Session::Impl {
             else if (u == "X") g.x = b;
             else if (u == "Y") g.y = b;
             else if (u == "S" || u == "SP") g.s = b;
-            else if (u == "P") g.p = static_cast<Byte>(b | kFlagU);
+            else if (u == "P") {
+                g.p = static_cast<Byte>(b | kFlagU);
+                CpuState st = s.m_.cpu().state();  // a new I flag applies at once (no CLI/SEI delay)
+                st.irqInhibit = g.flag(kFlagI);
+                s.m_.cpu().setState(st);
+            }
             else throw SessionError("unknown register '" + name + "' (A, X, Y, S, PC, P)");
         }
         return ok().set("regs", regs());
     }
 
     Json cmdRun(const std::string& cmd) {
-        Cpu& c = *s.cpu_;
+        Cpu& c = s.m_.cpu();
         const std::uint64_t irqs = c.interruptCount();
         if (cmd == "step") {
             const std::int64_t n = number("n", 1);
@@ -573,14 +478,14 @@ struct Session::Impl {
                 for (std::size_t i = 0; i < b.size(); ++i) poke(static_cast<Address>(a + i), b[i]);
             }
         }
-        const std::uint64_t irqs = s.cpu_->interruptCount();
-        const Byte s0 = s.cpu_->registers().s;
-        const RunResult rr = s.cpu_->call(entry, ret, limit());
+        const std::uint64_t irqs = s.m_.cpu().interruptCount();
+        const Byte s0 = s.m_.cpu().registers().s;
+        const RunResult rr = s.m_.cpu().call(entry, ret, limit());
         Json j = runReply(rr, irqs);
         const bool returned = rr.reason == StopReason::Returned;
         j.set("returned", returned);
         if (!returned && rr.reason == StopReason::Reached) {
-            j.set("note", "the PC reached the return address, but the stack pointer is " + hex2(s.cpu_->registers().s) +
+            j.set("note", "the PC reached the return address, but the stack pointer is " + hex2(s.m_.cpu().registers().s) +
                               " instead of " + hex2(s0) + ": this is not a return");
         }
         return j;
@@ -588,32 +493,31 @@ struct Session::Impl {
 
     Json cmdRunProgram() {
         needC64("run_program");
-        if (!s.kernal_) throw SessionError("run_program needs the KERNAL emulation");
+        if (!s.m_.kernal()) throw SessionError("run_program needs the KERNAL emulation");
         Address entry = 0;
         if (has("addr")) {
             entry = address("addr");
-        } else if (auto t = findSysTarget(*s.memory_, 0x0801)) {
+        } else if (auto t = findSysTarget(s.m_.memory(), 0x0801)) {
             entry = *t;
         } else {
             throw SessionError("no BASIC starter with SYS at $0801: give 'addr'");
         }
-        s.kernal_->startProgram(entry);
-        const std::uint64_t irqs = s.cpu_->interruptCount();
-        Json j = runReply(s.cpu_->run(limit()), irqs);
+        s.m_.kernal()->startProgram(entry);
+        const std::uint64_t irqs = s.m_.cpu().interruptCount();
+        Json j = runReply(s.m_.cpu().run(limit()), irqs);
         j.set("entry", hex4(entry));
         return j;
     }
 
     Json cmdBreaks(const std::string& cmd) {
         if (cmd == "clear_breaks") {
-            s.cpu_->clearBreakpoints();
-            s.watches_.clear();
-            s.applyWatches();
+            s.m_.cpu().clearBreakpoints();
+            s.m_.clearWatches();
             return ok();
         }
         Json b = Json::array(), w = Json::array();
-        for (Address a : s.cpu_->breakpoints()) b.push(hex4(a));
-        for (const Watch& x : s.watches_) {
+        for (Address a : s.m_.cpu().breakpoints()) b.push(hex4(a));
+        for (const WatchSpec& x : s.m_.watches()) {
             w.push(Json::object().set("addr", hex4(x.start)).set("len", x.length).set(
                 "kind", x.read && x.write ? "access" : x.read ? "read" : "write"));
         }
@@ -623,47 +527,44 @@ struct Session::Impl {
     Json cmdWatch(const std::string& cmd) {
         const Address a = address("addr");
         if (cmd == "unwatch") {
-            s.watches_.erase(std::remove_if(s.watches_.begin(), s.watches_.end(), [a](const Watch& w) { return w.start == a; }),
-                             s.watches_.end());
-            s.applyWatches();
+            s.m_.removeWatch(a);
             return ok();
         }
         const std::int64_t len = number("len", 1);
         if (len < 1 || len > 0x10000) throw SessionError("len must be 1..65536");
         const std::string kind = has("kind") ? text("kind") : "write";
         if (kind != "write" && kind != "read" && kind != "access") throw SessionError("kind must be write, read or access");
-        s.watches_.push_back({a, static_cast<unsigned>(len), kind != "write", kind != "read"});
-        s.applyWatches();
+        s.m_.addWatch({a, static_cast<unsigned>(len), kind != "write", kind != "read"});
         return ok();
     }
 
     Json cmdCheckpoint(const std::string& cmd) {
         if (cmd == "checkpoints") {
             Json l = Json::array();
-            for (const auto& [n, snap] : s.checkpoints_) l.push(n);
+            for (const auto& [n, snap] : s.m_.checkpoints) l.push(n);
             return ok().set("checkpoints", l);
         }
         const std::string name = text("name");
         if (cmd == "checkpoint") {
-            s.checkpoints_[name] = s.capture();
+            s.m_.checkpoints[name] = s.m_.capture();
             return ok();
         }
-        auto it = s.checkpoints_.find(name);
-        if (it == s.checkpoints_.end()) throw SessionError("no checkpoint '" + name + "'");
-        if (cmd == "drop") s.checkpoints_.erase(it);
-        else s.restore(it->second);
+        auto it = s.m_.checkpoints.find(name);
+        if (it == s.m_.checkpoints.end()) throw SessionError("no checkpoint '" + name + "'");
+        if (cmd == "drop") s.m_.checkpoints.erase(it);
+        else s.m_.restore(it->second);
         return ok();
     }
 
     Json cmdDiff() {
         const std::string name = text("name");
-        auto it = s.checkpoints_.find(name);
-        if (it == s.checkpoints_.end()) throw SessionError("no checkpoint '" + name + "'");
+        auto it = s.m_.checkpoints.find(name);
+        if (it == s.m_.checkpoints.end()) throw SessionError("no checkpoint '" + name + "'");
         std::size_t total = 0;
-        std::vector<MemoryChange> changes = diffBytes(it->second.memory.raw(), s.memory_->raw(), 0, 8, 50, &total);
+        std::vector<MemoryChange> changes = diffBytes(it->second.memory.raw(), s.m_.memory().raw(), 0, 8, 50, &total);
         std::size_t colorTotal = 0;
-        if (s.c64_ && it->second.c64) {
-            const C64::State now = s.c64_->state();
+        if (s.m_.c64() && it->second.c64) {
+            const C64::State now = s.m_.c64()->state();
             const std::vector<Byte> a(it->second.c64->color.begin(), it->second.c64->color.end());
             const std::vector<Byte> b(now.color.begin(), now.color.end());
             for (MemoryChange& c : diffBytes(a, b, 0xD800, 8, 50, &colorTotal)) changes.push_back(std::move(c));
@@ -675,14 +576,14 @@ struct Session::Impl {
             Json r = Json::object().set("addr", hex4(c.address)).set("len", c.before.size());
             r.set("before", hexBytes(std::vector<Byte>(c.before.begin(), c.before.begin() + static_cast<std::ptrdiff_t>(shown))));
             r.set("after", hexBytes(std::vector<Byte>(c.after.begin(), c.after.begin() + static_cast<std::ptrdiff_t>(shown))));
-            if (c.address >= 0xD800 && c.address < 0xDC00 && colorTotal > 0 && s.c64_) r.set("area", "color");
+            if (c.address >= 0xD800 && c.address < 0xDC00 && colorTotal > 0 && s.m_.c64()) r.set("area", "color");
             ranges.push(r);
         }
         return ok().set("changed_bytes", total + colorTotal).set("ranges", ranges);
     }
 
     Json stateJson() const {
-        const CpuState c = s.cpu_->state();
+        const CpuState c = s.m_.cpu().state();
         Json j = regs();
         j.set("irq_line", c.irqLine).set("nmi_pending", c.nmiPending).set("interrupts", c.interrupts).set("depth", c.depth);
         j.set("port_enabled", c.portEnabled).set("port_direction", hex2(c.portDirection)).set("port_data", hex2(c.portData));
@@ -696,13 +597,13 @@ struct Session::Impl {
         for (const char* k : {"A", "X", "Y", "S", "P", "PC"})
             if (const Json* v = st->find(k)) regsOnly.set(k, *v);
         setRegsFrom(&regsOnly);
-        CpuState c = s.cpu_->state();
+        CpuState c = s.m_.cpu().state();
         if (const Json* v = st->find("halted"); v && v->isBool()) c.halted = v->asBool();
         if (const Json* v = st->find("irq_line"); v && v->isBool()) c.irqLine = v->asBool();
         if (const Json* v = st->find("nmi_pending"); v && v->isBool()) c.nmiPending = v->asBool();
         if (const Json* v = st->find("port_direction")) c.portDirection = static_cast<Byte>(value(*v, "port_direction"));
         if (const Json* v = st->find("port_data")) c.portData = static_cast<Byte>(value(*v, "port_data"));
-        s.cpu_->setState(c);
+        s.m_.cpu().setState(c);
         return ok().set("state", stateJson());
     }
 
@@ -710,14 +611,10 @@ struct Session::Impl {
         needFiles();
         const std::string file = text("file");
         if (cmd == "save_state") {
-            writeBinaryFile(file, serialize(s.capture()));
+            writeBinaryFile(file, serialize(s.m_.capture()));
             return ok();
         }
-        const Snapshot snap = deserializeSnapshot(readBinaryFile(file));
-        if (snap.c64.has_value() != (s.c64_ != nullptr)) {
-            throw SessionError(std::string("the snapshot is for the ") + (snap.c64 ? "c64" : "generic") + " machine; select it first");
-        }
-        s.restore(snap);
+        s.m_.restore(deserializeSnapshot(readBinaryFile(file)));
         return ok().set("regs", regs());
     }
 
@@ -725,10 +622,10 @@ struct Session::Impl {
         const std::string kind = has("kind") ? text("kind") : "irq";
         const bool release = flag("release", false);
         if (kind == "nmi") {
-            s.cpu_->nmi();
+            s.m_.cpu().nmi();
         } else if (kind == "irq") {
-            if (s.c64_) s.c64_->setExternalIrq(!release);
-            else s.cpu_->setIrq(!release);
+            if (s.m_.c64()) s.m_.c64()->setExternalIrq(!release);
+            else s.m_.cpu().setIrq(!release);
         } else {
             throw SessionError("kind must be irq or nmi");
         }
@@ -738,7 +635,7 @@ struct Session::Impl {
     Json cmdIo() {
         needC64("io");
         Json out = Json::array();
-        for (const IoWrite& w : s.c64_->takeIoLog()) {
+        for (const IoWrite& w : s.m_.c64()->takeIoLog()) {
             Json e = Json::object().set("addr", hex4(w.address)).set("value", hex2(w.value)).set("pc", hex4(w.pc)).set("chip", w.chip);
             if (!w.name.empty()) e.set("what", w.name);
             out.push(e);
@@ -749,8 +646,8 @@ struct Session::Impl {
     Json cmdKernalCalls() {
         needC64("kernalcalls");
         Json out = Json::array();
-        if (s.kernal_) {
-            for (const KernalCall& c : s.kernal_->takeCalls()) {
+        if (s.m_.kernal()) {
+            for (const KernalCall& c : s.m_.kernal()->takeCalls()) {
                 auto rj = [](const Registers& r) {
                     return Json::object().set("A", hex2(r.a)).set("X", hex2(r.x)).set("Y", hex2(r.y)).set("flags", flagsText(r.p));
                 };
@@ -765,18 +662,12 @@ struct Session::Impl {
 
     Json cmdScreen() {
         needC64("screen");
-        const C64& m = *s.c64_;
+        const C64& m = (*s.m_.c64());
         const Address screen = m.screenAddress();
         Json lines = Json::array();
-        for (unsigned row = 0; row < 25; ++row) {
-            std::string l;
-            for (unsigned col = 0; col < 40; ++col) l += screenChar(s.memory_->read8(static_cast<Address>(screen + row * 40 + col)));
-            while (!l.empty() && l.back() == ' ') l.pop_back();
-            lines.push(l);
-        }
-        const Byte d011 = m.vic(0x11), d016 = m.vic(0x16);
-        std::string mode = (d011 & 0x20) ? ((d016 & 0x10) ? "multicolor bitmap" : "hires bitmap")
-                                         : (d011 & 0x40) ? "extended background text" : (d016 & 0x10) ? "multicolor text" : "text";
+        for (const std::string& l : s.m_.screenLines()) lines.push(l);
+        const Byte d011 = m.vic(0x11);
+        const std::string mode = s.m_.screenMode();
         Json j = ok().set("lines", lines).set("mode", mode).set("screen", hex4(screen)).set("bank", hex4(m.vicBank()));
         j.set("border", m.vic(0x20) & 0x0F).set("background", m.vic(0x21) & 0x0F).set("display_on", (d011 & 0x10) != 0);
         j.set("memory", m.describeConfig());
@@ -784,24 +675,7 @@ struct Session::Impl {
     }
 
     Json cmdReset() {
-        const bool clear = flag("memory", false);
-        if (clear) s.memory_->clear();
-        CpuState c = s.cpu_->state();
-        c.instructions = c.cycles = c.interrupts = 0;
-        s.cpu_->setState(c);
-        if (s.c64_) {
-            s.c64_->resetChips();
-            if (s.kernal_) {
-                s.kernal_->coldStart();
-                s.cpu_->registers() = Registers{};
-                s.cpu_->registers().pc = Kernal::kExitTrap;
-            } else {
-                s.cpu_->powerOn();
-            }
-        } else {
-            s.cpu_->powerOn();
-            s.cpu_->registers().s = 0xFF;
-        }
+        s.m_.reset(flag("memory", false));
         return ok().set("regs", regs());
     }
 
@@ -810,72 +684,17 @@ struct Session::Impl {
         const std::string kernal = has("kernal") ? text("kernal") : "hle";
         if (type != "generic" && type != "c64") throw SessionError("machine type must be generic or c64");
         if (kernal != "hle" && kernal != "rom") throw SessionError("kernal must be hle or rom");
-        s.selectMachine(type == "c64", kernal == "hle");
+        s.m_.select(type == "c64", kernal == "hle");
         Json j = ok().set("machine", type);
-        if (type == "c64") j.set("kernal", s.kernal_ ? "emulated" : "rom (load it with load_rom)").set("memory", s.c64_->describeConfig());
+        if (type == "c64") j.set("kernal", s.m_.kernal() ? "emulated" : "rom (load it with load_rom)").set("memory", s.m_.c64()->describeConfig());
         return j;
     }
 };
 
 // ---- Session ------------------------------------------------------------------------------------------
-Session::Session(SessionOptions options) : options_(options) { selectMachine(false, false); }
+Session::Session(SessionOptions options) : options_(options) {}
 
-Session::~Session() {
-    kernal_.reset();
-    c64_.reset();
-}
-
-void Session::selectMachine(bool c64, bool hle) {
-    kernal_.reset();
-    c64_.reset();
-    cpu_.reset();
-    memory_ = std::make_unique<Memory>();
-    cpu_ = std::make_unique<Cpu>(*memory_);
-    symbols_.clear();
-    checkpoints_.clear();
-    watches_.clear();
-    attached_.clear();
-    if (!c64) {
-        cpu_->setPortEnabled(false);  // generic machine: 64 KiB RAM everywhere, $00/$01 are RAM
-        cpu_->powerOn();
-        cpu_->registers().s = 0xFF;
-        return;
-    }
-    c64_ = std::make_unique<C64>(*memory_, *cpu_);
-    if (hle) {
-        kernal_ = std::make_unique<Kernal>(*c64_, *cpu_, *memory_);
-        kernal_->install();
-        cpu_->powerOn();
-        c64_->resetChips();
-        kernal_->coldStart();
-        (void)c64_->takeIoLog();
-        cpu_->registers().pc = Kernal::kExitTrap;
-    } else {
-        cpu_->powerOn();
-        c64_->resetChips();
-    }
-}
-
-Snapshot Session::capture() const {
-    Snapshot snap;
-    snap.cpu = cpu_->state();
-    snap.memory = *memory_;
-    if (c64_) snap.c64 = c64_->state();
-    if (kernal_) snap.kernal = kernal_->state();
-    return snap;
-}
-
-void Session::restore(const Snapshot& snap) {
-    *memory_ = snap.memory;
-    cpu_->setState(snap.cpu);
-    if (c64_ && snap.c64) c64_->setState(*snap.c64);
-    if (kernal_ && snap.kernal) kernal_->setState(*snap.kernal);
-}
-
-void Session::applyWatches() {
-    cpu_->clearWatchpoints();
-    for (const Watch& w : watches_) cpu_->addWatchpoint(w.start, w.length, w.read, w.write);
-}
+Session::~Session() = default;
 
 Json Session::handle(const Json& request) {
     try {

@@ -280,5 +280,17 @@ int main() {
         }
     }
 
+    // setting P applies the new I flag at once: an IRQ is taken by the very next step
+    {
+        Session s;
+        call(s, R"({"cmd":"write","addr":"0xFFFE","hex":"00 C0"})");
+        call(s, R"({"cmd":"write","addr":"0x2000","hex":"EA EA"})");
+        call(s, R"({"cmd":"set","regs":{"PC":"0x2000","P":"0x20"}})");
+        call(s, R"({"cmd":"interrupt","kind":"irq"})");
+        const Json r = call(s, R"({"cmd":"step"})");
+        CHECK_EQ(str(r, "pc"), std::string("0xC000"));
+        CHECK_EQ(num(r, "interrupts"), 1);
+    }
+
     return finish("session");
 }

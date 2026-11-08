@@ -52,6 +52,8 @@ add_library(m6510core STATIC
   src/image_io.cpp
   src/json.cpp
   src/kernal.cpp
+  src/machine.cpp
+  src/monitor.cpp
   src/opcodes.cpp
   src/petscii.cpp
   src/session.cpp

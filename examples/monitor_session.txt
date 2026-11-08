@@ -1,0 +1,34 @@
+a c000
+start: LDX #$05
+       LDA #$00
+loop:  CLC
+       ADC #$03
+       DEX
+       BNE loop
+       STA $0400
+done:  RTS
+
+d start 8
+b loop
+g start
+r
+bc
+ru done
+m 0400 1
+machine c64
+a c000
+       LDX #0
+print: LDA $C100,X
+       BEQ $C00D
+       JSR CHROUT
+       INX
+       BNE print
+       INC $D020
+       RTS
+
+e c100 "HELLO, C64" 0d 0
+run c000
+console
+kernal
+io
+q

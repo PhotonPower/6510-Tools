@@ -1,5 +1,5 @@
 # Each suite is one executable without an external test framework (see test_util.hpp).
-foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session)
+foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session monitor)
   add_executable(test_${name} test_${name}.cpp)
   target_link_libraries(test_${name} PRIVATE m6510core)
   m6510_set_warnings(test_${name})
@@ -20,3 +20,8 @@ add_test(NAME cli_roundtrip
 add_test(NAME cli_serve
          COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSESSION=${PROJECT_SOURCE_DIR}/examples/agent_session.jsonl
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_serve.cmake)
+
+# The example monitor script (docs/monitor.md).
+add_test(NAME cli_monitor
+         COMMAND ${CMAKE_COMMAND} -DTOOL=$<TARGET_FILE:m6510tool> -DSCRIPT=${PROJECT_SOURCE_DIR}/examples/monitor_session.txt
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_monitor.cmake)
