@@ -476,8 +476,13 @@ class Tools:
         first, end = max(first, lo), min(last + 1, hi)   # `to` is inclusive; the listing command wants the end
         if end <= first:
             raise ValueError(f"the range lies outside the analysed program (0x{lo:04X}-0x{hi - 1:04X})")
+        end = min(max(end, last + 3), hi)   # the instruction at `to` complete (a 3-byte instruction would else be bytes)
         r = self.s.ok(cmd="listing", verify=False, equates=False, addresses=True, max_chars=24000, **{"from": f"0x{first:04X}", "to": f"0x{end:X}"})
-        return r["listing"] + ("\n[listing truncated]" if r.get("truncated") else "")
+        if not r.get("truncated"):
+            return r["listing"]
+        shown = re.findall(r";\s*\$([0-9A-F]{4})", r["listing"])
+        cont = f"; continue with from=0x{int(shown[-1], 16) + 1:04X}" if shown else ""
+        return r["listing"] + f"\n[listing TRUNCATED (too long){cont}]"
 
     def t_disassemble(self, addr, count=16):
         r = self.s.ok(cmd="dis", addr=norm_addr(addr), count=max(1, min(int(count), 200)))
@@ -807,7 +812,8 @@ class Tools:
             m = re.match(r"\s+([A-Z]{3}(?:\.W)?)\s+([^;]*)", line)
             if not m or "#" in m.group(2) or m.group(1) in ("JMP", "JSR") and "(" not in m.group(2):
                 continue
-            for h in re.findall(r"\$([0-9A-Fa-f]{2,4})\b", m.group(2)):
+            operand = re.sub(r"[A-Za-z_][A-Za-z0-9_]*\s*[+-]\s*\$?[0-9A-Fa-f]+", "", m.group(2))   # name+$40 is an offset, not an address
+            for h in re.findall(r"\$([0-9A-Fa-f]{2,4})\b", operand):
                 numeric.add(int(h, 16))
         # not the stack page, not the chips and ROMs, not the screen; zero page from $02 (the processor port is $00/$01)
         numeric = sorted(a for a in numeric if 2 <= a < 0x100 or 0x0200 <= a < 0x0400 or 0x0800 <= a < 0xA000 or 0xC000 <= a < 0xD000)
@@ -938,6 +944,7 @@ class Annotator:
         self.llm = passes[0]["llm"] if passes else None   # no model in a dry run
         self.max_turns = args.max_turns
         self.entries = []
+        self.hints = []
         self.mode = "explore"
         self.tools = Tools(server)
 
@@ -958,6 +965,10 @@ class Annotator:
         req = {"cmd": "analyze", "reset": True}
         if self.entries:
             req["entries"] = self.entries
+        if self.hints:
+            req["hints"] = self.hints
+        if self.a.range_from and self.a.range_to:
+            req["from"], req["to"] = self.a.range_from, self.a.range_to
         return self.s.ok(**req)
 
     def setup(self):
@@ -965,7 +976,14 @@ class Annotator:
         check_server(s)
         s.ok(cmd="machine", type=a.machine)
         self.tools.c64 = a.machine == "c64"
-        if a.prg:
+        if a.attach:
+            s.ok(cmd="attach", file=a.attach)
+        if a.snapshot:
+            s.ok(cmd="load_state", file=a.snapshot)
+            if not (a.range_from and a.range_to):
+                raise ServerError("--snapshot needs --from and --to (the range of the program in memory)")
+            self.say(f"snapshot loaded: {a.snapshot}")
+        elif a.prg:
             r = s.ok(cmd="load_file", file=a.prg, **({"addr": a.org} if a.org else {}))
             self.say(f'program loaded: {r["start"]}-{r["end"]}, entry {r["entry"]}' + (f' ({r["basic"]})' if r.get("basic") else ""))
         else:
@@ -977,6 +995,11 @@ class Annotator:
             s.ok(cmd="ann_load", file=a.project)
             self.say("project loaded")
         self.entries = list(a.entry or [])
+        if a.hints:
+            with open(a.hints, encoding="utf-8") as f:
+                data = json.load(f)
+            self.hints = data.get("addresses", data) if isinstance(data, dict) else data
+            self.say(f"{len(self.hints)} executed addresses as hints")
         r = self.analyze()
         self.tools.program = (to_int(r["from"]), to_int(r["to"]))   # [first, end): `to` is the end of the analysed range
         self.say(f'analysed {r["instructions"]} instructions, {r["from"]}-{r["to"]}, {r["routines"]} routines'
@@ -1383,6 +1406,11 @@ def build_parser():
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("--prg", help="C64 program (PRG or P00; load address from the file)")
     src.add_argument("--bin", help="raw binary (use with --org)")
+    src.add_argument("--snapshot", help="a machine state (save_state) as the starting point, e.g. a game that is running (needs --from/--to)")
+    p.add_argument("--from", dest="range_from", help="first address of the program in memory (with --snapshot)")
+    p.add_argument("--to", dest="range_to", help="end of the program in memory, exclusive (with --snapshot), e.g. 0x10000")
+    p.add_argument("--hints", help='JSON file with executed addresses (the reply of {"cmd":"executed","addresses":true}, or a list)')
+    p.add_argument("--attach", help="disk/tape image or file for LOAD (the program loads parts or high scores)")
     p.add_argument("--org", help='load address of --bin, or a different one for --prg (e.g. "0xC000")')
     p.add_argument("--machine", choices=["c64", "generic"], default="c64", help="c64: memory map, chips, KERNAL emulation, screen; generic: 64 KiB RAM")
     p.add_argument("--no-auto-tables", action="store_true", help="do not mark and follow tables of code addresses that the analysis only suggests")

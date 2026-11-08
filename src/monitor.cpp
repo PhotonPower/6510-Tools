@@ -204,6 +204,7 @@ struct Monitor::Impl {
             case StopReason::Returned: o += "returned"; break;
             case StopReason::Halted: o += "JAM at " + h4(mach().cpu().instructionAddress()) + " (processor halted)"; break;
             case StopReason::Requested: o += mach().cpu().stopMessage(); break;
+            case StopReason::WrittenCode: o += "code in memory the program wrote, at " + h4(regs().pc); break;
             case StopReason::Limit: o += "instruction limit (" + std::to_string(m.limit_) + ")"; break;
             case StopReason::None: o += "stepped"; break;
         }
@@ -833,6 +834,7 @@ std::string Monitor::Impl::cmdFiles(const std::string& cmd, const std::vector<st
         std::string out = "ok: " + h4(p.address) + "-" + h4(static_cast<unsigned>(p.bytes.empty() ? p.address : p.end() - 1)) + " (" +
                           std::to_string(p.bytes.size()) + " bytes), PC=" + h4(f.entry);
         if (!f.basic.empty()) out += "  (BASIC: " + f.basic + ")";
+        if (!f.source.empty() && f.source != file) out += "  from " + f.source;
         return out + "\n";
     }
     if (cmd == "sv") {

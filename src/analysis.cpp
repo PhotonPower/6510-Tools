@@ -83,6 +83,39 @@ void Analysis::addEntry(Address address) {
     if (inRange(address)) entries_.insert(address);
 }
 
+void Analysis::addCodeHint(Address address) {
+    if (inRange(address)) codeHints_.insert(address);
+}
+
+void Analysis::adoptOrphans() {
+    // code that the entries do not reach (only an executed-address hint led there): one routine per block start
+    std::set<Address> reached;
+    std::vector<Address> work;
+    for (const Address e : entries_) work.push_back(e);
+    for (const Address e : tableTargets_) work.push_back(e);
+    for (const Address e : callTargets_) work.push_back(e);
+    while (!work.empty()) {
+        const Address a = work.back();
+        work.pop_back();
+        const Instruction* in = at(a);
+        if (!in || !reached.insert(a).second) continue;
+        const std::uint32_t next = a + static_cast<std::uint32_t>(in->length());
+        if ((in->flow == FlowKind::Normal || in->flow == FlowKind::CondJump || in->flow == FlowKind::Call) && inRange(next))
+            work.push_back(static_cast<Address>(next));
+        if (in->target && inRange(*in->target) && in->flow != FlowKind::Call) work.push_back(*in->target);
+        for (const JumpTable& t : tables_)
+            if (t.jump == a)
+                for (const Address x : t.targets) work.push_back(x);
+    }
+    for (const auto& [a, in] : code_) {
+        if (reached.count(a)) continue;
+        const auto p = previous(a);
+        const Instruction* prev = p ? at(*p) : nullptr;
+        const bool fallsIn = prev && (prev->flow == FlowKind::Normal || prev->flow == FlowKind::CondJump || prev->flow == FlowKind::Call);
+        if (!fallsIn || reached.count(*p)) entries_.insert(a);  // a block nobody falls into, or the code after a reached block's end
+    }
+}
+
 void Analysis::addPointerTable(Address table, unsigned bytes, bool minusOne) {
     JumpTable t;
     t.kind = JumpTable::Kind::Pointers;
@@ -433,6 +466,7 @@ void Analysis::scanPointerTables() {
 void Analysis::analyzeFlow() {
     std::vector<Address> work(entries_.begin(), entries_.end());
     work.insert(work.end(), tableTargets_.begin(), tableTargets_.end());
+    work.insert(work.end(), codeHints_.begin(), codeHints_.end());
     do {
         follow(work);
         detectTables(work);
@@ -440,6 +474,7 @@ void Analysis::analyzeFlow() {
     } while (!work.empty());
     detectSelfModification();
     scanPointerTables();
+    if (!codeHints_.empty()) adoptOrphans();
 }
 
 void Analysis::analyzeLinear(Address from, std::uint32_t to) {

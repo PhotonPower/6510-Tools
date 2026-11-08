@@ -72,7 +72,7 @@ private:
 std::vector<Byte> serialize(const Snapshot& s) {
     Writer w;
     for (char c : kMagic) w.u8(static_cast<Byte>(c));
-    w.u8(1);  // version
+    w.u8(2);  // version (2: four CIA timers)
     const CpuState& c = s.cpu;
     w.u8(c.regs.a);
     w.u8(c.regs.x);
@@ -100,12 +100,16 @@ std::vector<Byte> serialize(const Snapshot& s) {
         w.u8(m.vicIrq);
         w.u8(m.cia1Icr);
         w.u8(m.cia1Mask);
-        w.u16(m.cia1Latch);
-        w.u64(m.cia1Start);
-        w.u64(m.nextTimer);
+        for (const C64::State::Timer& t : m.timers) {
+            w.u16(t.latch);
+            w.u16(t.counter);
+            w.u64(t.start);
+            w.u64(t.next);
+        }
         w.u64(m.lastRasterCheck);
         w.u8(m.cia2Icr);
         w.u8(m.cia2Mask);
+        w.u8(m.nmiLine ? 1 : 0);
         w.u32(m.random);
         w.u8(m.externalIrq ? 1 : 0);
     }
@@ -121,7 +125,8 @@ Snapshot deserializeSnapshot(const std::vector<Byte>& bytes) {
     Reader r(bytes);
     for (char c : kMagic)
         if (r.u8() != static_cast<Byte>(c)) throw IoError("not a 6510 snapshot (missing M6510SN1)");
-    if (r.u8() != 1) throw IoError("unsupported snapshot version");
+    const unsigned version = r.u8();
+    if (version != 1 && version != 2) throw IoError("unsupported snapshot version");
     Snapshot s;
     CpuState& c = s.cpu;
     c.regs.a = static_cast<Byte>(r.u8());
@@ -159,12 +164,30 @@ Snapshot deserializeSnapshot(const std::vector<Byte>& bytes) {
         m.vicIrq = static_cast<Byte>(r.u8());
         m.cia1Icr = static_cast<Byte>(r.u8());
         m.cia1Mask = static_cast<Byte>(r.u8());
-        m.cia1Latch = static_cast<std::uint16_t>(r.u16());
-        m.cia1Start = r.u64();
-        m.nextTimer = r.u64();
+        if (version == 1) {  // only CIA 1 timer A: latch, (re)load cycle, next underflow
+            C64::State::Timer& t = m.timers[0];
+            t.latch = static_cast<std::uint16_t>(r.u16());
+            const std::uint64_t start = r.u64();
+            t.next = r.u64();
+            t.counter = t.latch;
+            t.start = t.next >= std::uint64_t{t.latch} + 1 ? t.next - t.latch - 1 : start;
+            for (unsigned i = 1; i < 4; ++i) m.timers[i].counter = m.timers[i].latch = 0xFFFF;
+        } else {
+            for (C64::State::Timer& t : m.timers) {
+                t.latch = static_cast<std::uint16_t>(r.u16());
+                t.counter = static_cast<std::uint16_t>(r.u16());
+                t.start = r.u64();
+                t.next = r.u64();
+            }
+        }
         m.lastRasterCheck = r.u64();
         m.cia2Icr = static_cast<Byte>(r.u8());
         m.cia2Mask = static_cast<Byte>(r.u8());
+        if (version == 2) {
+            const unsigned nmi = r.u8();
+            if (nmi > 1) throw IoError("bad NMI flag in snapshot");
+            m.nmiLine = nmi == 1;
+        }
         m.random = r.u32();
         const unsigned ext = r.u8();
         if (ext > 1) throw IoError("bad IRQ flag in snapshot");

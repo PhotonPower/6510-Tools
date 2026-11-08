@@ -25,6 +25,38 @@ std::string pad(std::string s, std::size_t w) {
     return s;
 }
 
+std::size_t textWidth(const std::string& s) {  // UTF-8: count code points, not bytes
+    std::size_t n = 0;
+    for (const unsigned char c : s) n += (c & 0xC0) != 0x80;
+    return n;
+}
+
+// `text` as lines of at most `width` characters (words are not split; a longer word gets a line of its own), the first
+// line starting with `first`, the others with `cont`
+std::vector<std::string> wrapText(const std::string& text, std::size_t width, const std::string& first, const std::string& cont) {
+    std::vector<std::string> out;
+    std::string line = first;
+    bool empty = true;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        while (i < text.size() && text[i] == ' ') ++i;
+        std::size_t j = i;
+        while (j < text.size() && text[j] != ' ') ++j;
+        if (j == i) break;
+        const std::string word = text.substr(i, j - i);
+        if (!empty && textWidth(line) + 1 + textWidth(word) > width) {
+            out.push_back(line);
+            line = cont;
+            empty = true;
+        }
+        line += (empty ? "" : " ") + word;
+        empty = false;
+        i = j;
+    }
+    out.push_back(line);
+    return out;
+}
+
 // Chip registers are mirrored; only the base address gets the register's name (a mirror stays a number).
 bool isBaseRegister(Address a) {
     if (a >= 0xD000 && a < 0xD400) return a < 0xD040;
@@ -67,6 +99,8 @@ private:
     [[nodiscard]] std::string nameFor(Address a) const;
     std::string labelExpr(Address a);
     std::string symExpr(Address a);
+    std::string systemName(Address a);
+    std::optional<Address> namedRegionInside(Address a) const;
     void useEquate(const std::string& name, Address a);
     void collectReferences();
     void buildItems();
@@ -89,7 +123,23 @@ std::string Renderer::nameFor(Address a) const {
     return "data_" + hexDigits(a, 4);
 }
 
+std::optional<Address> Renderer::namedRegionInside(Address a) const {
+    // an address inside (not at the start of) a named data region or a named variable of several bytes, without a name of
+    // its own: it is written as name+offset and gets no label (no data_XXXX in the middle of a named table)
+    if (ann_.nameAt(a) || ann_.variableAt(a)) return std::nullopt;
+    for (const VariableDoc& v : ann_.variables())
+        if (a > v.address && a < v.address + v.size && inList(v.address)) return v.address;
+    const DataRegion* r = ann_.dataCovering(a);
+    if (!r || r->name.empty() || r->address == a || r->kind == DataKind::Lohi) return std::nullopt;
+    return r->address;
+}
+
 std::string Renderer::labelExpr(Address a) {
+    if (const auto base = namedRegionInside(a)) {
+        labelUsed_.insert(*base);
+        const unsigned off = a - *base;
+        return nameFor(*base) + "+" + (off < 10 ? std::to_string(off) : "$" + hexDigits(off, 1));
+    }
     auto it = items_.upper_bound(a);
     if (it == items_.begin()) return h4(a);
     --it;
@@ -107,7 +157,39 @@ void Renderer::useEquate(const std::string& name, Address a) {
     equates_[a] = name;
 }
 
+std::string Renderer::systemName(Address a) {
+    // chip registers, KERNAL entries, RAM vectors and colour RAM keep their names even inside the analysed range (a program
+    // whose image reaches $D000-$FFFF still meets the chips and the ROM there), unless code was found at the address or the
+    // user named it (a program that banks the ROM out uses the RAM underneath: room_grid beats TKSA)
+    if (!o_.c64Names || an_.isCode(a) || ann_.nameAt(a)) return "";
+    bool covered = false;
+    for (const VariableDoc& v : ann_.variables())
+        covered = covered || (a >= v.address && a < v.address + v.size);
+    const auto& k = kernalSymbols();
+    // a KERNAL jump table entry stays itself even inside a table the program keeps in the RAM underneath (JSR SETLFS, not
+    // JSR room_grid+$24: the program calls the ROM with the ROM banked in)
+    if (covered && !(a >= 0xFF81 && a < 0xFFF6)) return "";
+    if (const auto it = k.find(a); it != k.end() && isValidSymbolName(it->second)) {
+        useEquate(it->second, a);
+        return it->second;
+    }
+    if (covered) return "";
+    if (a >= 0xD000 && a < 0xE000 && isBaseRegister(a)) {
+        const std::string r = C64::registerName(a);
+        if (!r.empty() && isValidSymbolName(r)) {
+            useEquate(r, a);
+            return r;
+        }
+    }
+    if (a >= 0xD800 && a < 0xDC00) {
+        useEquate("COLRAM", 0xD800);
+        return a == 0xD800 ? std::string("COLRAM") : "COLRAM+$" + hexDigits(a - 0xD800, 1);
+    }
+    return "";
+}
+
 std::string Renderer::symExpr(Address a) {
+    if (const std::string n = systemName(a); !n.empty()) return n;
     if (inList(a)) return labelExpr(a);
     if (const auto e = ann_.expressionFor(a)) {
         const std::string base = e->substr(0, e->find('+'));
@@ -152,18 +234,21 @@ void Renderer::collectReferences() {
     for (const RoutineInfo& r : an_.routines()) routineEntries_.insert(r.entry);
     for (const auto& [a, in] : an_.code()) {
         if (!inList(a)) continue;
-        if (in.target && inList(*in.target)) needLabel_.insert(*in.target);
-        if (in.reference && inList(*in.reference)) {
+        if (in.target && inList(*in.target) && systemName(*in.target).empty()) needLabel_.insert(*in.target);
+        if (in.reference && inList(*in.reference) && systemName(*in.reference).empty() && !namedRegionInside(*in.reference)) {
             needLabel_.insert(*in.reference);
             if (in.mode == Mode::Absolute || in.mode == Mode::ZeroPage) scalarRefs_.insert(*in.reference);
         }
     }
     for (const auto& [a, p] : an_.pointerImmediates())
-        if (inList(a) && inList(p.first)) needLabel_.insert(p.first);
+        if (inList(a) && inList(p.first) && !ann_.isConstant(a) && !namedRegionInside(p.first) && systemName(p.first).empty())
+            needLabel_.insert(p.first);
     for (const JumpTable& t : an_.jumpTables()) {
-        if (!t.followed) continue;
+        // only a table the listing shows as a table names its targets (a pattern found in code, or a vector that holds
+        // a data address, needs no label: data addresses get name+offset where they are used)
+        if (!t.followed || !inList(t.table) || !an_.isTableData(t.table)) continue;
         for (const Address target : t.targets)
-            if (inList(target)) needLabel_.insert(target);
+            if (inList(target) && an_.at(target) && systemName(target).empty()) needLabel_.insert(target);
     }
     for (const auto& [a, n] : ann_.labels())
         if (inList(a)) needLabel_.insert(a);
@@ -176,6 +261,8 @@ void Renderer::collectReferences() {
 }
 
 void Renderer::buildItems() {
+    equates_.clear();       // collectReferences only asked; the names in use are collected while the lines are written
+    equateNames_.clear();
     // where tables found by the analysis start (and which side they are)
     std::map<Address, std::pair<const JumpTable*, bool>> tableStarts;
     for (const JumpTable& t : an_.jumpTables()) {
@@ -216,6 +303,11 @@ void Renderer::buildItems() {
             it.region = region;
             it.hiSide = region->kind == DataKind::Lohi && region->partner == at && region->address != at;
             it.length = std::min<std::uint32_t>(region->length, o_.to - a);
+            if (region->kind == DataKind::Bytes) {
+                // plain bytes: a variable, a referenced address or a comment inside starts a line of its own (the rest
+                // continues as plain bytes), so that a named table inside a large region keeps its name
+                if (const auto b = boundaries.upper_bound(at); b != boundaries.end() && *b < a + it.length) it.length = *b - a;
+            }
         } else if (const auto ts = tableStarts.find(at); ts != tableStarts.end()) {
             const JumpTable& t = *ts->second.first;
             it.kind = Item::Table;
@@ -301,8 +393,12 @@ std::vector<std::string> Renderer::renderCode(const Item& it, unsigned& userComm
     }
     std::string line = "        " + text;
     const std::string c = commentText(it.start, comments);
-    if (!c.empty()) line = pad(line, 40) + "; " + c;
-    return {line};
+    if (c.empty()) return {line};
+    line = pad(line, 40);
+    if (o_.wrap == 0 || textWidth(line) + 2 + textWidth(c) <= o_.wrap) return {line + "; " + c};
+    std::vector<std::string> lines = wrapText(c, o_.wrap, "        ; ", "        ; ");
+    lines.push_back("        " + text);
+    return lines;
 }
 
 std::vector<std::string> Renderer::renderItem(const Item& it, unsigned& userComments, unsigned& instructions) {
@@ -367,7 +463,16 @@ std::vector<std::string> Renderer::renderItem(const Item& it, unsigned& userComm
                     std::vector<std::string> v;
                     for (unsigned i = 0; i + 1 < n; i += 2) {
                         const auto w = static_cast<Address>(byteAt(i) | (byteAt(i + 1) << 8));
-                        if (r.kind == DataKind::Words) v.push_back(h4(w));
+                        if (r.kind == DataKind::Words) {
+                            // a word that is exactly the address of something the user named (a table of pointers to
+                            // data: room records, lists) shows that name; other words stay numbers
+                            if (inList(w) && ann_.nameAt(w) && (an_.isCode(w) || !an_.at(w))) {
+                                labelUsed_.insert(w);
+                                v.push_back(nameFor(w));
+                            } else {
+                                v.push_back(h4(w));
+                            }
+                        }
                         else if (r.kind == DataKind::Pointers) v.push_back(tableEntry(w, false, w));
                         else v.push_back(tableEntry(static_cast<Address>(w + 1), true, w));
                     }
@@ -473,8 +578,16 @@ std::vector<std::string> Renderer::renderItem(const Item& it, unsigned& userComm
     if (it.region && !it.region->comment.empty() && !it.hiSide && it.region->address == it.start) parts.push_back(it.region->comment);
     const std::string c = commentText(it.start, parts);
     if (!c.empty() && !lines.empty()) {
-        if (lines[0].find(';') == std::string::npos) lines[0] = pad(lines[0], 40) + "; " + c;
-        else lines.insert(lines.begin(), "; " + c);
+        const bool fits = lines[0].find(';') == std::string::npos &&
+                          (o_.wrap == 0 || textWidth(pad(lines[0], 40)) + 2 + textWidth(c) <= o_.wrap);
+        if (fits) {
+            lines[0] = pad(lines[0], 40) + "; " + c;
+        } else if (o_.wrap == 0) {
+            lines.insert(lines.begin(), "; " + c);
+        } else {
+            const std::vector<std::string> above = wrapText(c, o_.wrap, "; ", "; ");
+            lines.insert(lines.begin(), above.begin(), above.end());
+        }
     }
     return lines;
 }
@@ -496,7 +609,13 @@ ListingResult Renderer::run() {
         if (!equates_.empty()) out += "\n";
         for (const auto& [a, n] : equates_) {
             std::string l = pad(n, 16) + "= " + h4(a);
-            if (const VariableDoc* v = ann_.variableAt(a); v && !v->comment.empty()) l = pad(l, 40) + "; " + v->comment;
+            if (const VariableDoc* v = ann_.variableAt(a); v && !v->comment.empty()) {
+                if (o_.wrap == 0 || textWidth(pad(l, 40)) + 2 + textWidth(v->comment) <= o_.wrap) {
+                    l = pad(l, 40) + "; " + v->comment;
+                } else {
+                    for (const std::string& w : wrapText(v->comment, o_.wrap, "; ", "; ")) out += w + "\n";
+                }
+            }
         else if (o_.c64Names && kernalSymbols().count(a)) l = pad(l, 40) + "; KERNAL";
             else if (a >= 0xD000 && a < 0xE000 && isBaseRegister(a) && n == C64::registerName(a)) l = pad(l, 40) + "; chip register";
             out += l + "\n";
@@ -509,10 +628,17 @@ ListingResult Renderer::run() {
         if (routine) {
             out += "\n; " + std::string(60, '-') + "\n";
             if (const RoutineDoc* d = ann_.routineAt(a)) {
-                out += "; " + nameFor(a) + (d->summary.empty() ? "" : ": " + d->summary) + "\n";
-                if (!d->inputs.empty()) out += ";   in:       " + d->inputs + "\n";
-                if (!d->outputs.empty()) out += ";   out:      " + d->outputs + "\n";
-                if (!d->clobbers.empty()) out += ";   clobbers: " + d->clobbers + "\n";
+                auto put = [&](const std::string& first, const std::string& cont, const std::string& text) {
+                    if (o_.wrap == 0) {
+                        out += first + text + "\n";
+                        return;
+                    }
+                    for (const std::string& w : wrapText(text, o_.wrap, first, cont)) out += w + "\n";
+                };
+                put("; ", ";   ", nameFor(a) + (d->summary.empty() ? "" : ": " + d->summary));
+                if (!d->inputs.empty()) put(";   in:       ", ";             ", d->inputs);
+                if (!d->outputs.empty()) put(";   out:      ", ";             ", d->outputs);
+                if (!d->clobbers.empty()) put(";   clobbers: ", ";             ", d->clobbers);
                 if (!d->confidence.empty()) out += ";   confidence: " + d->confidence + "\n";
             } else {
                 out += "; " + nameFor(a) + " (not documented yet)\n";
@@ -524,7 +650,8 @@ ListingResult Renderer::run() {
             std::string text = *b, line;
             for (char c : text + "\n") {
                 if (c == '\n') {
-                    out += "; " + line + "\n";
+                    if (o_.wrap == 0) out += "; " + line + "\n";
+                    else for (const std::string& w : wrapText(line, o_.wrap, "; ", "; ")) out += w + "\n";
                     line.clear();
                 } else {
                     line += c;

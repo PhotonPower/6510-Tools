@@ -48,11 +48,32 @@ public:
     std::array<Byte, 0x2000>& kernalRomForEmulation() { return kernal_; }
     void setKernalPresent(bool on) { hasKernal_ = on; }
 
+    // ---- input: joysticks and the keyboard matrix as the CIA 1 ports see them ------------------------
+    /// Joystick bits (1 = pressed): 1 up, 2 down, 4 left, 8 right, 16 fire. Port 2 is read at $DC00, port 1 at $DC01.
+    void setJoystick(unsigned port, Byte pressed);
+    [[nodiscard]] Byte joystick(unsigned port) const { return port == 1 ? joy1_ : joy2_; }
+    /// Presses (or releases) a key of the 8x8 matrix: column = PA bit ($DC00), row = PB bit ($DC01).
+    void setKey(unsigned column, unsigned row, bool pressed);
+    void releaseAllKeys() { keys_.fill(0); }
+    /// Matrix position of a key name ("A", "1", "SPACE", "RETURN", "F1", "RUNSTOP", "LSHIFT", "CRSRDOWN", ...); false if unknown.
+    static bool keyPosition(const std::string& name, unsigned& column, unsigned& row);
+    /// The keys pressed now, by name.
+    [[nodiscard]] std::vector<std::string> pressedKeys() const;
+
+    // ---- cartridge (CRT hardware type 0: 8K, 16K, Ultimax) ------------------------------------------
+    /// Inserts a cartridge: ROML (at $8000) and ROMH (at $A000, or $E000 in Ultimax mode), each at most 8 KiB, and the
+    /// EXROM/GAME lines (true = active, i.e. low). 8K: EXROM; 16K: EXROM and GAME; Ultimax: GAME only.
+    void insertCartridge(std::vector<Byte> roml, std::vector<Byte> romh, bool exrom, bool game);
+    void removeCartridge();
+    [[nodiscard]] bool ultimax() const { return cartGame_ && !cartExrom_; }
+    /// "none", "8K", "16K" or "Ultimax".
+    [[nodiscard]] std::string cartridgeMode() const;
+
     // ---- memory configuration ------------------------------------------------------------------
     /// LORAM/HIRAM/CHAREN as the processor port drives them (bits 0-2).
     [[nodiscard]] Byte config() const { return config_; }
-    [[nodiscard]] bool basicVisible() const { return hasBasic_ && (config_ & 3) == 3; }
-    [[nodiscard]] bool kernalVisible() const { return hasKernal_ && (config_ & 2) != 0; }
+    [[nodiscard]] bool basicVisible() const { return hasBasic_ && (config_ & 3) == 3 && !cartGame_; }
+    [[nodiscard]] bool kernalVisible() const { return hasKernal_ && (config_ & 2) != 0 && !ultimax(); }
     [[nodiscard]] bool ioVisible() const { return (config_ & 3) != 0 && (config_ & 4) != 0; }
     [[nodiscard]] bool charVisible() const { return hasChar_ && (config_ & 3) != 0 && (config_ & 4) == 0; }
     /// What the processor sees at `address` (no side effects).
@@ -87,10 +108,17 @@ public:
         Byte config = 7;
         Byte vicIrq = 0;          ///< $D019 latch
         Byte cia1Icr = 0, cia1Mask = 0;
-        std::uint16_t cia1Latch = 0xFFFF;
-        std::uint64_t cia1Start = 0;  ///< cycle at which timer A was (re)loaded
-        std::uint64_t nextTimer = 0, lastRasterCheck = 0;
+        /// The four CIA timers: CIA 1 A, CIA 1 B, CIA 2 A, CIA 2 B.
+        struct Timer {
+            std::uint16_t latch = 0xFFFF;
+            std::uint16_t counter = 0xFFFF;  ///< value at `start` (running) or now (stopped)
+            std::uint64_t start = 0;         ///< cycle at which the counter had the value `counter`
+            std::uint64_t next = 0;          ///< cycle of the next underflow (counting cycles)
+        };
+        std::array<Timer, 4> timers{};
+        std::uint64_t lastRasterCheck = 0;
         Byte cia2Icr = 0, cia2Mask = 0;
+        bool nmiLine = false;     ///< CIA 2 interrupt output (the NMI input is edge-triggered)
         std::uint32_t random = 0x12345678;
         bool externalIrq = false;  ///< IRQ requested from outside (session, monitor)
     };
@@ -112,6 +140,11 @@ private:
     std::array<Byte, 0x1000> char_{};
     bool hasBasic_ = false, hasKernal_ = false, hasChar_ = false;
     State s_;
+    std::vector<Byte> roml_, romh_;
+    Byte joy1_ = 0, joy2_ = 0;            // external inputs: not part of the state (like a person at the joystick)
+    std::array<Byte, 8> keys_{};          // pressed keys: column -> row bits
+    bool cartExrom_ = false, cartGame_ = false;  // lines active
+    bool readMapped(Address a, Byte& v, bool effects);
     Byte& config_ = s_.config;
     std::array<Byte, 0x400>& color_ = s_.color;
     std::array<Byte, 0x40>& vic_ = s_.vic;
@@ -121,7 +154,14 @@ private:
     bool writeIo(Address a, Byte v);
     void tick();
     void updateIrq();
-    [[nodiscard]] unsigned timerA() const;
+    /// Current value of timer `index` (0 = CIA 1 A, 1 = CIA 1 B, 2 = CIA 2 A, 3 = CIA 2 B).
+    [[nodiscard]] unsigned timerValue(unsigned index) const;
+    [[nodiscard]] Byte& control(unsigned index) { return (index < 2 ? s_.cia1 : s_.cia2)[0x0E + (index & 1)]; }
+    [[nodiscard]] Byte control(unsigned index) const { return (index < 2 ? s_.cia1 : s_.cia2)[0x0E + (index & 1)]; }
+    [[nodiscard]] bool countsCycles(unsigned index) const { return !(index & 1) || (control(index) & 0x60) == 0; }
+    void timerUnderflows(unsigned index, std::uint64_t n);
+    void writeTimer(unsigned cia, unsigned r, Byte v);
+    void updateNmi();
 };
 
 }  // namespace m6510

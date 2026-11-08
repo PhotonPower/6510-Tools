@@ -60,6 +60,7 @@ const char* stopName(StopReason r) {
         case StopReason::Returned: return "returned";
         case StopReason::Halted: return "halted";
         case StopReason::Requested: return "exit";
+        case StopReason::WrittenCode: return "unpacked";
     }
     return "?";
 }
@@ -187,6 +188,32 @@ struct Session::Impl {
         if (cmd == "set") return cmdSet();
         if (cmd == "step" || cmd == "step_over" || cmd == "run" || cmd == "run_until_return") return cmdRun(cmd);
         if (cmd == "call") return cmdCall();
+        if (cmd == "track_writes" || cmd == "written" || cmd == "run_until_unpacked" || cmd == "save_memory") return cmdUnpack(cmd);
+        if (cmd == "track_execution") {
+            const bool on = flag("on", true);
+            if (!on) s.m_.cpu().trackExecution(false);
+            else if (flag("clear", true) || !s.m_.cpu().trackingExecution()) s.m_.cpu().trackExecution(true);
+            return ok().set("tracking", s.m_.cpu().trackingExecution());
+        }
+        if (cmd == "executed") {
+            const std::vector<Address> ex = s.m_.cpu().executedAddresses();
+            Json ranges = Json::array();
+            // blocks of executed instructions: gaps of up to 3 bytes (an instruction's operand) are bridged
+            for (std::size_t i = 0; i < ex.size();) {
+                std::size_t j = i;
+                while (j + 1 < ex.size() && ex[j + 1] - ex[j] <= 3) ++j;
+                if (ranges.items().size() < 200) ranges.push(Json::object().set("start", hex4(ex[i])).set("last", hex4(ex[j])));
+                i = j + 1;
+            }
+            Json j = ok().set("tracking", s.m_.cpu().trackingExecution()).set("instructions", ex.size()).set("blocks", ranges);
+            if (flag("addresses", false)) {
+                Json all = Json::array();
+                for (const Address a : ex) all.push(hex4(a));
+                j.set("addresses", all);
+            }
+            return j;
+        }
+        if (cmd == "input") return cmdInput();
         if (cmd == "run_program") return cmdRunProgram();
         if (cmd == "break" || cmd == "unbreak") {
             const Address a = address("addr");
@@ -236,7 +263,7 @@ struct Session::Impl {
     Json help() const {
         Json list = Json::array();
         for (const char* c : {"asm", "dis", "read", "write", "load_file", "load_rom", "attach", "regs", "set", "step",
-                              "step_over", "run", "run_until_return", "call", "run_program", "break", "unbreak", "breaks",
+                              "step_over", "run", "run_until_return", "call", "track_writes", "written", "run_until_unpacked", "save_memory", "track_execution", "executed", "input", "run_program", "break", "unbreak", "breaks",
                               "clear_breaks", "watch", "unwatch", "checkpoint", "rollback", "drop", "checkpoints", "diff",
                               "state", "set_state", "save_state", "load_state", "interrupt", "io", "kernalcalls", "console",
                               "keys", "screen", "screenshot", "screens", "screen_drop", "screen_diff", "analyze", "routines",
@@ -372,10 +399,14 @@ struct Session::Impl {
         needFiles();
         const std::string type = has("type") ? text("type") : "auto";
         const std::optional<Address> at = has("addr") ? std::optional<Address>(address("addr")) : std::nullopt;
-        const LoadedFile f = s.m_.loadFile(text("file"), type, at);
+        std::string file = text("file");
+        if (has("name")) file += ":" + text("name");  // a file in a D64/T64 image
+        const LoadedFile f = s.m_.loadFile(file, type, at);
         const Program& p = f.program;
         Json j = ok().set("start", hex4(p.address)).set("end", hex4(p.bytes.empty() ? p.address : p.end() - 1));
         if (!f.basic.empty()) j.set("basic", f.basic);
+        if (!f.source.empty()) j.set("source", f.source);
+        if (s.m_.c64() && s.m_.c64()->cartridgeMode() != "none") j.set("cartridge", s.m_.c64()->cartridgeMode());
         j.set("entry", hex4(f.entry));
         return j;
     }
@@ -502,6 +533,144 @@ struct Session::Impl {
                               " instead of " + hex2(s0) + ": this is not a return");
         }
         return j;
+    }
+
+    // ---- self-extracting programs: which memory did the program write, and where does it jump into it ----
+    Json cmdUnpack(const std::string& cmd) {
+        Cpu& cpu = s.m_.cpu();
+        auto rangesJson = [&](std::size_t minLength, std::size_t most) {
+            auto ranges = cpu.writtenRanges(minLength);
+            std::stable_sort(ranges.begin(), ranges.end(), [](const auto& a, const auto& b) { return a.second - a.first > b.second - b.first; });
+            Json arr = Json::array();
+            for (std::size_t i = 0; i < ranges.size() && i < most; ++i) {
+                arr.push(Json::object().set("start", hex4(ranges[i].first)).set("end", ranges[i].second == 0x10000 ? std::string("0x10000") : hex4(ranges[i].second))
+                             .set("size", ranges[i].second - ranges[i].first));
+            }
+            return arr;
+        };
+        if (cmd == "track_writes") {
+            const bool on = flag("on", true);
+            if (on && (flag("clear", true) || !cpu.tracking())) cpu.trackWrites(true);
+            if (!on) cpu.trackWrites(false);
+            s.unpackIgnore_.clear();
+            s.lastUnpackHit_.reset();
+            return ok().set("tracking", cpu.tracking());
+        }
+        if (cmd == "written") {
+            const std::int64_t minLength = number("min_length", 16);
+            const std::int64_t most = number("limit", 20);
+            if (minLength < 1 || minLength > 0x10000) throw SessionError("min_length must be 1..65536");
+            if (most < 1 || most > 200) throw SessionError("limit must be 1..200");
+            return ok().set("tracking", cpu.tracking()).set("bytes", cpu.writtenBytes())
+                .set("ranges", rangesJson(static_cast<std::size_t>(minLength), static_cast<std::size_t>(most)));
+        }
+        if (cmd == "save_memory") {
+            needFiles();
+            const Address a = address("addr");
+            const std::int64_t len = number("len", 0);
+            if (len < 1 || a + len > 0x10000) throw SessionError("len must be 1.. and addr + len at most 0x10000");
+            const std::string view = has("view") ? text("view") : "cpu";
+            const std::string format = has("format") ? text("format") : "prg";
+            if (view != "cpu" && view != "ram") throw SessionError("view must be cpu or ram");
+            if (format != "prg" && format != "raw") throw SessionError("format must be prg or raw");
+            std::vector<Byte> bytes;
+            for (std::int64_t i = 0; i < len; ++i) {
+                const auto x = static_cast<Address>(a + i);
+                bytes.push_back(view == "ram" ? s.m_.memory().read8(x) : peek(x));
+            }
+            const std::string file = text("file");
+            writeBinaryFile(file, format == "prg" ? makePrg(a, bytes) : bytes);
+            return ok().set("file", file).set("addr", hex4(a)).set("bytes", len).set("format", format);
+        }
+        // run_until_unpacked
+        const std::int64_t minWritten = number("min_written", 4096);
+        if (minWritten < 1 || minWritten > 0x10000) throw SessionError("min_written must be 1..65536");
+        std::vector<std::pair<Address, std::uint32_t>> ignore;
+        if (const Json* extra = arg("ignore"); extra && !extra->isNull()) {
+            if (!extra->isArray()) throw SessionError("ignore must be a list of [first, end] pairs");
+            for (const Json& pair : extra->items()) {
+                if (!pair.isArray() || pair.items().size() != 2) throw SessionError("ignore must be a list of [first, end] pairs");
+                const std::int64_t e = value(pair.items()[1], "ignore");
+                if (e < 0 || e > 0x10000) throw SessionError("ignore: the end must be 0..0x10000");
+                ignore.emplace_back(static_cast<Address>(value(pair.items()[0], "ignore") & 0xFFFF), static_cast<std::uint32_t>(e));
+            }
+        }
+        const std::uint64_t n = has("max_instructions") ? limit() : std::uint64_t{50'000'000};
+        if (!flag("continue", false) || !cpu.tracking()) {
+            cpu.trackWrites(true);
+            s.unpackIgnore_.clear();
+            s.lastUnpackHit_.reset();
+        } else if (s.lastUnpackHit_) {
+            s.unpackIgnore_.push_back(*s.lastUnpackHit_);  // the stage that was found last does not count again
+        }
+        ignore.insert(ignore.end(), s.unpackIgnore_.begin(), s.unpackIgnore_.end());
+        ignore.emplace_back(0x0000, 0x0200);  // zero page and stack: work areas, not results
+        const std::uint64_t irqs = cpu.interruptCount();
+        cpu.watchWrittenCode(true, static_cast<std::size_t>(minWritten), ignore);
+        const RunResult r = cpu.run(n);
+        cpu.watchWrittenCode(false);
+        Json j = runReply(r, irqs);
+        if (r.reason == StopReason::WrittenCode) {
+            const Address pc = cpu.registers().pc;
+            for (const auto& [first, end] : cpu.writtenRanges(1)) {
+                if (pc >= first && pc < end) {
+                    s.lastUnpackHit_ = std::make_pair(first, end);
+                    j.set("region", Json::object().set("start", hex4(first)).set("end", end == 0x10000 ? std::string("0x10000") : hex4(end))
+                                        .set("size", end - first));
+                    break;
+                }
+            }
+        }
+        j.set("written_bytes", cpu.writtenBytes()).set("ranges", rangesJson(64, 8));
+        return j;
+    }
+
+    Json cmdInput() {
+        needC64("input");
+        C64& c = *s.m_.c64();
+        auto joystickBits = [&](const char* key) -> Byte {
+            const std::string t = text(key);
+            Byte bits = 0;
+            std::string word;
+            for (char ch : t + ",") {
+                if (ch == ',' || ch == ' ' || ch == '+') {
+                    if (word == "up") bits |= 1;
+                    else if (word == "down") bits |= 2;
+                    else if (word == "left") bits |= 4;
+                    else if (word == "right") bits |= 8;
+                    else if (word == "fire") bits |= 16;
+                    else if (!word.empty()) throw SessionError(std::string(key) + ": unknown direction '" + word + "' (up, down, left, right, fire)");
+                    word.clear();
+                } else {
+                    word += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                }
+            }
+            return bits;
+        };
+        if (has("joystick1")) c.setJoystick(1, joystickBits("joystick1"));
+        if (has("joystick2")) c.setJoystick(2, joystickBits("joystick2"));
+        if (const Json* k = arg("keys"); k && !k->isNull()) {
+            if (!k->isArray()) throw SessionError("keys must be a list of key names (\"SPACE\", \"A\", \"F1\", \"RUNSTOP\", ...)");
+            std::vector<std::pair<unsigned, unsigned>> pos;
+            for (const Json& name : k->items()) {
+                unsigned col = 0, row = 0;
+                if (!name.isString() || !C64::keyPosition(name.asString(), col, row))
+                    throw SessionError("unknown key " + name.dump());
+                pos.emplace_back(col, row);
+            }
+            c.releaseAllKeys();
+            for (const auto& [col, row] : pos) c.setKey(col, row, true);
+        }
+        auto joyText = [](Byte b) {
+            std::string t;
+            const char* names[] = {"up", "down", "left", "right", "fire"};
+            for (int i = 0; i < 5; ++i)
+                if ((b >> i) & 1) t += (t.empty() ? "" : ",") + std::string(names[i]);
+            return t;
+        };
+        Json keys = Json::array();
+        for (const std::string& n : c.pressedKeys()) keys.push(n);
+        return ok().set("joystick1", joyText(c.joystick(1))).set("joystick2", joyText(c.joystick(2))).set("keys", keys);
     }
 
     Json cmdRunProgram() {

@@ -6,10 +6,11 @@
 
 ## Wo wir stehen
 
-**Meilensteine 0.2 bis 0.5 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
+**Meilensteine 0.2 bis 0.6 sind erledigt:** Assembler, Disassembler, PRG/P00, BASIC-Detokenisierer (0.2); Prozessorkern
 (2,44 Mio. Einzelbefehls-Tests ohne Abweichung, Dormanns Funktionstest), Snapshots, `m6510tool serve`, C64-Maschine und
 KERNAL-Emulation (0.3); Monitor (0.4); Bildschirm als Bild, Analyse, verifiziertes Listing und Orchestrator für ein lokales
-Modell (0.5). Als Nächstes: Meilenstein 0.6 (Disk-, Tape- und Cartridge-Images, Entpacken).
+Modell (0.5); D64/T64/CRT lesen, Cartridges in der Maschine und selbstentpackende Programme (0.6). Damit ist der Umfang der
+Schwesterprojekte erreicht; was bleibt, steht unter „Danach (Ideen)“ – vor allem die Erprobung mit einem echten Modell.
 
 ## Meilenstein 0.2 – Opcode-Tabelle, Dekoder, Assembler, Disassembler (erledigt)
 
@@ -76,7 +77,11 @@ werden Einstiegspunkte und laufen in `run_routine` mit Interrupt-Rahmen (`call` 
   Vollständigkeitsprüfung, Projektdatei, Bericht, Dry-Run) und `agent/m6510_drive.py`; Tests gegen einen Mock-Ollama
 - Anleitung [walkthrough.md](walkthrough.md) mit einem Beispielprogramm, das alle Fälle enthält
 
-## Meilenstein 0.6 – Disk-, Tape- und Cartridge-Images, Entpacken
+## Meilenstein 0.6 – Disk-, Tape- und Cartridge-Images, Entpacken (erledigt)
+
+Umgesetzt wie unten beschrieben. Zusätzlich: Cartridges vom Typ 0 laufen in der C64-Maschine (8K, 16K, Ultimax), `attach`
+liefert `LOAD` die Dateien eines D64/T64, und `disk.d64:NAME` gilt überall, wo ein Programm gelesen wird. Mit echten Packern
+(Exomizer & Co.) ist das Entpacken noch nicht erprobt.
 
 - **D64** lesen (35/40 Spuren, mit/ohne Fehlerbytes; BAM, Verzeichnis, Dateiketten), `m6510tool d64 info|ls|extract|boot`;
   Kreuzprüfung gegen `c1541` (VICE)

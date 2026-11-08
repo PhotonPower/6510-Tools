@@ -138,6 +138,25 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         analysis_ = std::make_unique<Analysis>(*analysisView_, from, to);
         analysis_->setDataBarrier([this](Address a) { return ann_.dataCovering(a) != nullptr; });
         for (const Address e : entries) analysis_->addEntry(e);
+        std::size_t hints = 0;
+        if (const Json* h = arg("hints")) {
+            if (!h->isArray()) throw AnalysisError("'hints' must be a list of addresses (instructions known to be code)");
+            for (const Json& x : h->items()) {
+                const Address a = addressOf(x, "hints");
+                if (a >= from && a < to) {
+                    analysis_->addCodeHint(a);
+                    ++hints;
+                }
+            }
+        }
+        if (flag("use_executed")) {
+            if (!m_.cpu().trackingExecution()) throw AnalysisError("use_executed needs track_execution (and a run) first");
+            for (const Address a : m_.cpu().executedAddresses())
+                if (a >= from && a < to) {
+                    analysis_->addCodeHint(a);
+                    ++hints;
+                }
+        }
         for (const auto& [ra, region] : ann.dataRegions()) {
             if (region.kind == DataKind::Pointers) analysis_->addPointerTable(ra, region.length, false);
             if (region.kind == DataKind::RtsPointers) analysis_->addPointerTable(ra, region.length, true);
@@ -148,6 +167,7 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         Json j = ok;
         j.set("from", hex4(from)).set("to", to == 0x10000 ? std::string("0x10000") : hex4(to));
         j.set("code_bytes", analysis_->codeBytes()).set("range_bytes", to - from);
+        if (hints) j.set("executed_hints", hints);
         j.set("instructions", analysis_->code().size());
         j.set("routines", analysis_->routines().size());
         j.set("jump_tables", analysis_->jumpTables().size());
@@ -397,6 +417,8 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         lo.maxChars = static_cast<std::size_t>(number("max_chars", 0, 0, 100'000'000));
         lo.c64Names = m_.c64() != nullptr;
         lo.equates = flag("equates", true);
+        lo.wrap = static_cast<unsigned>(number("wrap", 0, 0, 1000));
+        if (lo.wrap > 0 && lo.wrap < 60) throw AnalysisError("wrap must be 0 (off) or at least 60");
         if (lo.from < an.from() || lo.to > an.to() || lo.to <= lo.from)
             throw AnalysisError("the range must lie inside the analysed range " + hex4(an.from()) + "-" + hex4(an.to() - 1));
         const ListingResult r = renderListing(*analysisView_, an, ann, lo);

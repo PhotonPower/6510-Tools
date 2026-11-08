@@ -30,7 +30,7 @@ const std::set<std::string>& systemNames() {
             const std::string r = C64::registerName(static_cast<Address>(a));
             if (!r.empty()) n.insert(upper(r));
         }
-        for (const char* r : {"S", "P", "PC", "SP"}) n.insert(r);
+        for (const char* r : {"S", "P", "PC", "SP", "COLRAM"}) n.insert(r);
         return n;
     }();
     return names;
@@ -137,17 +137,46 @@ std::optional<std::string> Annotations::setData(const DataRegion& r) {
         if (r.partner + r.length > 0x10000) return "the table of high bytes must end below $10000";
         if (r.partner < r.address + r.length && r.address < r.partner + r.length) return "the two tables of a lohi region overlap";
     }
-    // a new region may replace one that starts at the same address, but not overlap others
+    // a new region may replace one that starts at the same address, but not overlap others - except a placeholder (plain
+    // bytes without a name, e.g. "RAM under the KERNAL"), which is split around the new region
+    auto inNew = [&r](Address x) {
+        if (x >= r.address && x < r.address + r.length) return true;
+        return r.kind == DataKind::Lohi && x >= r.partner && x < r.partner + r.length;
+    };
+    auto placeholder = [](const DataRegion& d) { return d.kind == DataKind::Bytes && d.name.empty(); };
+    std::vector<Address> carve;
     for (const auto& [a, old] : data_) {
-        if (a == r.address) continue;
-        for (Address x : {r.address, r.kind == DataKind::Lohi ? r.partner : r.address}) {
-            for (unsigned i = 0; i < r.length; ++i) {
-                if (old.covers(static_cast<Address>(x + i))) return "overlaps the data region at " + hex4(a);
-            }
+        bool overlaps = false;
+        for (Address x : {r.address, r.kind == DataKind::Lohi ? r.partner : r.address})
+            for (unsigned i = 0; i < r.length && !overlaps; ++i) overlaps = old.covers(static_cast<Address>(x + i));
+        if (!overlaps) continue;
+        if (placeholder(old) && !(a == r.address && old.length <= r.length && r.kind != DataKind::Lohi)) {
+            carve.push_back(a);
+            continue;
         }
+        if (a != r.address) return "overlaps the data region at " + hex4(a);
     }
     if (!r.name.empty()) {
         if (auto err = claimName(r.address, r.name)) return err;
+    }
+    for (const Address a : carve) {
+        const DataRegion old = data_.at(a);
+        data_.erase(a);
+        std::uint32_t x = old.address;
+        const std::uint32_t end = old.address + old.length;
+        while (x < end) {
+            while (x < end && inNew(static_cast<Address>(x))) ++x;
+            const std::uint32_t start = x;
+            while (x < end && !inNew(static_cast<Address>(x))) ++x;
+            if (x > start) {
+                DataRegion part = old;
+                part.address = static_cast<Address>(start);
+                part.length = x - start;
+                part.name.clear();                    // claimName above may have named the old record at r.address
+                if (start != old.address) part.comment.clear();
+                data_[part.address] = part;
+            }
+        }
     }
     data_[r.address] = r;
     return std::nullopt;

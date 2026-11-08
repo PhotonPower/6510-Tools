@@ -19,6 +19,9 @@ struct ListingOptions {
     /// Title, `.CPU`, `NAME = $XXXX` lines and `* =`: needed to assemble the listing again; an excerpt for a reader can do
     /// without them (they are left out only if `verify` is off).
     bool equates = true;
+    /// 0 = comments as they are; otherwise the column at which long comments are wrapped: routine headers and comment
+    /// blocks over several lines, end-of-line comments that would reach past it as comment lines above their line.
+    unsigned wrap = 0;
 };
 
 struct ListingResult {

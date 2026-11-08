@@ -41,6 +41,31 @@ class DriveError(Exception):
     pass
 
 
+@contextlib.contextmanager
+def work_lock(work):
+    """An exclusive lock on the work directory for the whole command (load project -> tool -> save project), so that
+    several agents working on different routines of the same program do not overwrite each other's annotations."""
+    path = os.path.join(work, ".lock")
+    with open(path, "a+") as f:
+        try:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        except ImportError:  # Windows: msvcrt locks a byte range
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            yield
+        finally:
+            try:
+                import fcntl
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except ImportError:
+                import msvcrt
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 def paths(work):
     return os.path.join(work, "config.json"), os.path.join(work, "state.json"), os.path.join(work, "project.json")
 
@@ -104,12 +129,12 @@ def cmd_init(a):
     os.makedirs(a.work, exist_ok=True)
     config_path, state_path, project_path = paths(a.work)
     rest = list(a.rest)
-    if not any(x in rest for x in ("--prg", "--bin")):
-        raise DriveError("init needs the program: --prg FILE or --bin FILE --org ADDR (further options as for m6510_annotate.py)")
+    if not any(x in rest for x in ("--prg", "--bin", "--snapshot")):
+        raise DriveError("init needs the program: --prg FILE, --bin FILE --org ADDR or --snapshot FILE --from A --to B (further options as for m6510_annotate.py)")
     if "--project" in rest:
         raise DriveError("--project is set by the work directory (W/project.json)")
     ann.build_parser().parse_args(rest + ["--project", project_path])        # reject unknown options now
-    for key in ("--prg", "--bin"):                        # file names must stay valid from any directory
+    for key in ("--prg", "--bin", "--snapshot", "--hints", "--attach"):                        # file names must stay valid from any directory
         if key in rest:
             i = rest.index(key)
             rest[i + 1] = os.path.abspath(rest[i + 1])
@@ -287,7 +312,9 @@ def main(argv=None):
     elif extra:
         p.error("unrecognized arguments: " + " ".join(extra))
     try:
-        return {"init": cmd_init, "status": cmd_status, "show": cmd_show, "tool": cmd_tool, "finish": cmd_finish, "listing": cmd_listing, "report": cmd_report}[a.command](a) or 0
+        os.makedirs(a.work, exist_ok=True)
+        with work_lock(a.work):   # several agents may share one work directory: one command at a time
+            return {"init": cmd_init, "status": cmd_status, "show": cmd_show, "tool": cmd_tool, "finish": cmd_finish, "listing": cmd_listing, "report": cmd_report}[a.command](a) or 0
     except DriveError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

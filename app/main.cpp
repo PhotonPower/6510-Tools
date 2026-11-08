@@ -1,6 +1,6 @@
 // m6510tool - command line front end for the MOS 6510 / Commodore 64 tools.
 //
-// Implemented: asm, dis, basic list, monitor, serve. Planned (see docs/roadmap.md): d64, t64, crt.
+// Commands: asm, dis, basic list, monitor, serve, d64, t64, crt (docs/usage.md).
 
 #include <algorithm>
 #include <cctype>
@@ -19,6 +19,9 @@
 #endif
 
 #include "m6510/assembler.hpp"
+#include "m6510/crt.hpp"
+#include "m6510/d64.hpp"
+#include "m6510/t64.hpp"
 #include "m6510/disassembler.hpp"
 #include "m6510/expression.hpp"
 #include "m6510/format.hpp"
@@ -53,10 +56,16 @@ void printUsage(std::ostream& out) {
         << "  m6510tool monitor [file] [--org addr] [--c64] [--roms dir] [--no-files] [--quiet]\n"
         << "                                        interactive monitor (docs/monitor.md)\n"
         << "  m6510tool serve [--allow-files]       JSON lines on stdin/stdout (docs/agent-protocol.md)\n"
+        << "  m6510tool d64 info|ls <disk.d64>      disk name, ID, free blocks / directory\n"
+        << "  m6510tool d64 extract <disk.d64> <name> [-o file.prg]   a file (patterns with * and ?)\n"
+        << "  m6510tool d64 boot <disk.d64> [-o file.prg]             the first program, like LOAD\"*\",8,1\n"
+        << "  m6510tool d64 block <disk.d64> <track> <sector>         hex dump of a block\n"
+        << "  m6510tool t64 ls <tape.t64> | t64 extract <tape.t64> <name> [-o file.prg]\n"
+        << "  m6510tool crt info <cart.crt> | crt extract <cart.crt> <bank> <addr> [-o file.bin]\n"
+        << "Wherever a program is read (dis, basic list, monitor, serve load_file), \"disk.d64:NAME\" and\n"
+        << "\"tape.t64:NAME\" take a file out of an image.\n"
         << "  m6510tool help | version\n"
-        << "\n"
-        << "Planned (not implemented yet, see docs/roadmap.md):\n"
-        << "  m6510tool d64 | t64 | crt ...\n";
+        ;
 }
 
 std::int64_t parseNumber(const std::string& text, const char* what) {
@@ -180,11 +189,16 @@ int cmdDis(Args& args) {
     }
     if (input.empty()) throw UsageError("dis needs an input file");
 
-    const std::vector<Byte> file = readBinaryFile(input);
+    const bool fromImage = splitImageSpec(input).has_value();
+    const std::vector<Byte> file = fromImage ? std::vector<Byte>{} : readBinaryFile(input);
     const std::string ext = fileExtension(input);
     if (ext == ".bin" || ext == ".raw") raw = true;
     Program prog;
-    if (raw) {
+    if (fromImage) {
+        prog = loadProgramSpec(input);
+        if (org) prog.address = *org;
+        if (prog.end() > 0x10000) throw UsageError("program does not fit below $FFFF");
+    } else if (raw) {
         if (!org) throw UsageError("a raw file needs --org");
         prog.address = *org;
         prog.bytes = file;
@@ -229,7 +243,7 @@ int cmdBasic(Args& args) {
     if (sub != "list") throw UsageError("unknown basic sub-command '" + sub + "'");
     if (args.done()) throw UsageError("basic list needs a file");
     const std::string input = args.next();
-    const Program prog = loadProgramFile(input);
+    const Program prog = loadProgramSpec(input);
     Memory mem;
     loadProgram(mem, prog);
     std::string error;
@@ -345,11 +359,158 @@ int cmdServe(Args& args) {
     return kExitOk;
 }
 
-bool isPlanned(const std::string& command) {
-    for (const char* c : {"d64", "t64", "crt"}) {
-        if (command == c) return true;
+// ---- images ------------------------------------------------------------------------------------
+std::string outputName(Args& args, const std::string& fallback) {
+    std::string out = fallback;
+    while (!args.done()) {
+        const std::string a = args.next();
+        if (a == "-o") out = args.value(a);
+        else throw UsageError("unknown option '" + a + "'");
     }
-    return false;
+    return out;
+}
+
+std::string safeFileName(const std::string& name) {
+    std::string s;
+    for (char c : name) s += std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' ? c : '_';
+    return s.empty() ? "file" : s;
+}
+
+void printProblems(const std::vector<std::string>& problems) {
+    for (const std::string& p : problems) std::cerr << "warning: " << p << "\n";
+}
+
+int cmdD64(Args& args) {
+    if (args.done()) throw UsageError("d64 needs a subcommand: info, ls, extract, boot, block");
+    const std::string sub = args.next();
+    if (args.done()) throw UsageError("d64 " + sub + " needs a disk image");
+    const std::string path = args.next();
+    const D64Image disk(readBinaryFile(path));
+    if (sub == "info") {
+        if (!args.done()) throw UsageError("too many arguments");
+        std::cout << "name:   \"" << disk.diskName() << "\"\nid:     " << disk.diskId() << "\ndos:    " << disk.dosType() << "\n"
+                  << "tracks: " << disk.tracks() << (disk.hasErrorBytes() ? " (with error bytes, " + std::to_string(disk.badSectors()) + " bad sectors)" : "")
+                  << "\nfree:   " << disk.freeBlocks() << " blocks\nfiles:  " << disk.directory().size() << "\n";
+        printProblems(disk.problems());
+        return kExitOk;
+    }
+    if (sub == "ls") {
+        if (!args.done()) throw UsageError("too many arguments");
+        std::cout << "0 \"" << disk.diskName() << "\" " << disk.diskId() << " " << disk.dosType() << "\n";
+        for (const D64Entry& e : disk.directory()) {
+            std::string blocks = std::to_string(e.blocks);
+            blocks.append(blocks.size() < 5 ? 5 - blocks.size() : 1, ' ');
+            std::string name = "\"" + e.name + "\"";
+            name.append(name.size() < 19 ? 19 - name.size() : 1, ' ');
+            std::cout << blocks << name << (e.closed ? " " : "*") << e.type << (e.locked ? "<" : "") << "\n";
+        }
+        std::cout << disk.freeBlocks() << " blocks free.\n";
+        printProblems(disk.problems());
+        return kExitOk;
+    }
+    if (sub == "extract" || sub == "boot") {
+        std::string pattern = "*";
+        if (sub == "extract") {
+            if (args.done()) throw UsageError("d64 extract needs the name of the file (patterns with * and ?)");
+            pattern = args.next();
+        }
+        const auto entry = disk.find(pattern);
+        if (!entry) throw UsageError("no file matching \"" + pattern + "\" on " + path);
+        if (sub == "boot" && entry->type != "PRG") throw UsageError("the first file is not a program");
+        const std::vector<Byte> bytes = disk.readFile(*entry);
+        const std::string out = outputName(args, safeFileName(entry->name) + (entry->type == "PRG" ? ".prg" : "." + entry->type));
+        writeBinaryFile(out, bytes);
+        std::cout << "\"" << entry->name << "\" (" << entry->type << ", " << entry->blocks << " blocks, " << bytes.size() << " bytes";
+        if (entry->type == "PRG" && bytes.size() >= 2) std::cout << ", load address $" << hexDigits(static_cast<unsigned>(bytes[0] | (bytes[1] << 8)), 4);
+        std::cout << ") -> " << out << "\n";
+        printProblems(disk.problems());
+        return kExitOk;
+    }
+    if (sub == "block") {
+        if (args.done()) throw UsageError("d64 block needs track and sector");
+        const auto t = static_cast<unsigned>(parseNumber(args.next(), "track"));
+        if (args.done()) throw UsageError("d64 block needs track and sector");
+        const auto s = static_cast<unsigned>(parseNumber(args.next(), "sector"));
+        if (!args.done()) throw UsageError("too many arguments");
+        if (!disk.validBlock(t, s)) throw UsageError("track " + std::to_string(t) + " sector " + std::to_string(s) + " is not on the disk");
+        const std::vector<Byte> b = disk.block(t, s);
+        for (unsigned row = 0; row < 256; row += 16) {
+            std::cout << hexDigits(row, 2) << ": ";
+            std::string text;
+            for (unsigned i = 0; i < 16; ++i) {
+                std::cout << hexDigits(b[row + i], 2) << ' ';
+                text += b[row + i] >= 0x20 && b[row + i] < 0x7F ? static_cast<char>(b[row + i]) : '.';
+            }
+            std::cout << ' ' << text << "\n";
+        }
+        if (const auto e = disk.errorCode(t, s)) std::cout << "error code: " << static_cast<unsigned>(*e) << "\n";
+        return kExitOk;
+    }
+    throw UsageError("unknown subcommand '" + sub + "' (info, ls, extract, boot, block)");
+}
+
+int cmdT64(Args& args) {
+    if (args.done()) throw UsageError("t64 needs a subcommand: ls, extract");
+    const std::string sub = args.next();
+    if (args.done()) throw UsageError("t64 " + sub + " needs a tape image");
+    const std::string path = args.next();
+    const T64Image tape(readBinaryFile(path));
+    if (sub == "ls") {
+        if (!args.done()) throw UsageError("too many arguments");
+        std::cout << "\"" << tape.tapeName() << "\" (version " << hexDigits(tape.version(), 4) << ")\n";
+        for (const T64Entry& e : tape.entries())
+            std::cout << "  \"" << e.name << "\"  $" << hexDigits(e.start, 4) << "-$" << hexDigits(static_cast<unsigned>(e.start + e.length - 1), 4) << "  "
+                      << e.length << " bytes\n";
+        printProblems(tape.problems());
+        return kExitOk;
+    }
+    if (sub == "extract") {
+        if (args.done()) throw UsageError("t64 extract needs the name of the file (patterns with * and ?)");
+        const std::string pattern = args.next();
+        const auto entry = tape.find(pattern);
+        if (!entry) throw UsageError("no file matching \"" + pattern + "\" in " + path);
+        const Program p = tape.readProgram(*entry);
+        const std::string out = outputName(args, safeFileName(entry->name) + ".prg");
+        writeBinaryFile(out, makePrg(p.address, p.bytes));
+        std::cout << "\"" << entry->name << "\" ($" << hexDigits(p.address, 4) << ", " << p.bytes.size() << " bytes) -> " << out << "\n";
+        printProblems(tape.problems());
+        return kExitOk;
+    }
+    throw UsageError("unknown subcommand '" + sub + "' (ls, extract)");
+}
+
+int cmdCrt(Args& args) {
+    if (args.done()) throw UsageError("crt needs a subcommand: info, extract");
+    const std::string sub = args.next();
+    if (args.done()) throw UsageError("crt " + sub + " needs a cartridge image");
+    const std::string path = args.next();
+    const CrtImage crt(readBinaryFile(path));
+    if (sub == "info") {
+        if (!args.done()) throw UsageError("too many arguments");
+        std::cout << "name:  \"" << crt.name() << "\"\ntype:  " << crt.hardwareType() << " (" << crt.hardwareName() << ")\nmode:  " << crt.mode()
+                  << " (EXROM=" << crt.exrom() << " GAME=" << crt.game() << ")\nchips: " << crt.chips().size() << "\n";
+        for (const CrtChip& c : crt.chips())
+            std::cout << "  bank " << c.bank << "  $" << hexDigits(c.load, 4) << "-$" << hexDigits(static_cast<unsigned>(c.load + c.data.size() - 1), 4)
+                      << "  " << (c.type == 0 ? "ROM" : c.type == 1 ? "RAM" : "flash") << "\n";
+        if (crt.hardwareType() != 0) std::cout << "only type 0 can run in the emulator; `crt extract` writes the banks for the disassembler\n";
+        return kExitOk;
+    }
+    if (sub == "extract") {
+        if (args.done()) throw UsageError("crt extract needs a bank and a load address");
+        const auto bank = static_cast<unsigned>(parseNumber(args.next(), "bank"));
+        if (args.done()) throw UsageError("crt extract needs a bank and a load address");
+        const Address load = parseAddress(args.next(), "load address");
+        for (const CrtChip& c : crt.chips()) {
+            if (c.bank != bank || c.load != load) continue;
+            const std::string out = outputName(args, "bank" + std::to_string(bank) + "_" + hexDigits(load, 4) + ".bin");
+            writeBinaryFile(out, c.data);
+            std::cout << "bank " << bank << " at $" << hexDigits(load, 4) << ", " << c.data.size() << " bytes -> " << out
+                      << "  (m6510tool dis " << out << " --org " << load << ")\n";
+            return kExitOk;
+        }
+        throw UsageError("no CHIP packet with bank " + std::to_string(bank) + " at $" + hexDigits(load, 4));
+    }
+    throw UsageError("unknown subcommand '" + sub + "' (info, extract)");
 }
 
 }  // namespace
@@ -375,11 +536,10 @@ int main(int argc, char** argv) {
         if (command == "dis") return cmdDis(args);
         if (command == "basic") return cmdBasic(args);
         if (command == "monitor") return cmdMonitor(args);
+        if (command == "d64") return cmdD64(args);
+        if (command == "t64") return cmdT64(args);
+        if (command == "crt") return cmdCrt(args);
         if (command == "serve") return cmdServe(args);
-        if (isPlanned(command)) {
-            std::cerr << "m6510tool: '" << command << "' is not implemented yet (see docs/roadmap.md)\n";
-            return kExitUsage;
-        }
         std::cerr << "m6510tool: unknown command '" << command << "'\n\n";
         printUsage(std::cerr);
         return kExitUsage;

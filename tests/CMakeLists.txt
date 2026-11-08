@@ -1,5 +1,5 @@
 # Each suite is one executable without an external test framework (see test_util.hpp).
-foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session monitor video reverse jumptable datatypes)
+foreach(name format memory opcodes expression decoder assembler roundtrip disassembler petscii image_io cpu c64 session monitor video reverse jumptable datatypes d64 t64 crt)
   add_executable(test_${name} test_${name}.cpp)
   target_link_libraries(test_${name} PRIVATE m6510core)
   m6510_set_warnings(test_${name})

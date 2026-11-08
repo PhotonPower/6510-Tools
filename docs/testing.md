@@ -9,7 +9,7 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 
 ## Suites
 
-**Vorhanden (0.2–0.5):**
+**Vorhanden (0.2–0.6):**
 
 | Suite | Inhalt |
 |---|---|
@@ -33,7 +33,10 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 | `reverse` | Annotationen (Namensregeln: doppelt, Mnemonic, undokumentierte Mnemonics, Register, KERNAL- und Registernamen, Platzhalter, Länge; Umbenennen; Routinen, Variablen, Datenbereiche mit Überlappung, `lohi` mit Partner; JSON-Rundreise und abgelehnte Dateien), Analyse (Fluss, Routinen mit Tiefe, Blöcken, Aufrufern, I/O, Zero Page, KERNAL-Aufrufen, `$01`-Schreibzugriffen, Endsprung), selbstmodifizierender Code, Immediate-Zeiger und Konstanten, Interrupt-Handler, lineare Analyse, BASIC-Starter, Nicht-Vorzugsformen und instabile Opcodes, `.FILL`; Listing mit Namen, Kopfblöcken, Kommentaren, Variablen, Teilbereich, Kürzen; **2000 Zufallsprogramme mit zufälligen Annotationen aller Arten: jedes Listing verifiziert** |
 | `jumptable` | `RTS`-Trick mit getrennten Tabellen und mit Worttabelle, `JMP (vektor)` mit getrennten Tabellen (beide Reihenfolgen), fester Vektor im Programm, vom Code geschriebener Vektor (nicht verfolgt), Gegenbeispiele, Zeigertabelle als Vorschlag und annotiert verfolgt, annotierte `lohi`-Tabelle mit `minus_one`; 60 zufällige Verteiler mit 1–12 Fällen: jede Tabelle vollständig, jedes Listing verifiziert |
 | `datatypes` | PETSCII-Text (referenziert, mit Endmarke), Bildschirmcodes (in den Bildschirm kopiert), Nullbereiche, Worttabellen, Sprite über den Sprite-Zeiger, Zeichensatz über `$D018` (nicht das ROM), BASIC-Programm, Gegenbeispiele; Listing mit `.SCREEN`, Sprite-Bitmustern und Zeichensatz; 200 Zufallsbilder: keine Vermutung überdeckt Code oder eine andere, das Listing mit allen übernommenen Vermutungen ist verifiziert |
-| `agent` (Python) | Orchestrator gegen einen Mock-Ollama und den echten Server: kompletter Lauf (Reihenfolge Blätter zuerst, Namen der Aufgerufenen im Auftrag, abgelehnter Registername, Berichte von `run_routine` mit Speicher, Bausteinen, KERNAL-Aufrufen, `CHROUT`-Text, Bildschirmzeilen und Screenshot, verifiziertes Listing, Projektdatei), Modell ohne Bildverständnis, Fortsetzen, schlampige Werkzeugaufrufe (als Text, Argumente als String, `$`-Adressen, unbekannte Argumente und Werkzeuge), Zurückschicken bei Lücken, `finish` vor `document`, ungültiges JSON von Ollama, abgeschnittene Antworten, Modell ohne Denkmodus, ein Fehler mitten im Lauf, Konfigurationsfehler, Verfeinerungsdurchgang, Raw-Datei auf der generischen Maschine, `--dry-run` (auch für das Beispielprogramm), Interrupt-Handler mit `RTI`-Rahmen, Hilfsfunktionen; `m6510_drive.py`: kompletter Ablauf über mehrere Prozesse, `--accept-gaps`, Fehlermeldungen |
+| `agent` (Python) | **Entpacken** (`test_unpack.py`, Packer `tests/agent/unpack/lzpack.py`, Entpacker `depack.asm`): einstufig (`run_until_unpacked` hält am Einsprung, `save_memory` = Original, das Ergebnis läuft und lässt sich analysieren), zweistufig mit `continue`, `ignore` und Limits, Weg über ein D64 (`d64 ls/extract`, `load_file` mit `name`). Orchestrator gegen einen Mock-Ollama und den echten Server: kompletter Lauf (Reihenfolge Blätter zuerst, Namen der Aufgerufenen im Auftrag, abgelehnter Registername, Berichte von `run_routine` mit Speicher, Bausteinen, KERNAL-Aufrufen, `CHROUT`-Text, Bildschirmzeilen und Screenshot, verifiziertes Listing, Projektdatei), Modell ohne Bildverständnis, Fortsetzen, schlampige Werkzeugaufrufe (als Text, Argumente als String, `$`-Adressen, unbekannte Argumente und Werkzeuge), Zurückschicken bei Lücken, `finish` vor `document`, ungültiges JSON von Ollama, abgeschnittene Antworten, Modell ohne Denkmodus, ein Fehler mitten im Lauf, Konfigurationsfehler, Verfeinerungsdurchgang, Raw-Datei auf der generischen Maschine, `--dry-run` (auch für das Beispielprogramm), Interrupt-Handler mit `RTI`-Rahmen, Hilfsfunktionen; `m6510_drive.py`: kompletter Ablauf über mehrere Prozesse, `--accept-gaps`, Fehlermeldungen |
+| `d64` | selbst gebaute Disketten (`tests/image_builder.hpp`): Verzeichnis (Typen, geschlossen/geschützt, Blöcke), Dateiketten über mehrere Blöcke, genau ein Block, freie Blöcke, Name/ID/DOS-Typ, Muster `*`/`?`, 40 Spuren mit Fehlerbytes, Verzeichnis über mehrere Sektoren; Schleifen und Zeiger außerhalb in Dateiketten, Verzeichnisschleife, falsche Blockzahl, falsche Größe; **400 zufällige Mutationen: nur `IoError`**; `loadProgramSpec` (`disk.d64:NAME`), Sitzung (`load_file` mit `name`, `attach` + `LOAD` über die KERNAL-Emulation), Monitor `l` |
+| `t64` | Archiv mit zwei Dateien, Muster, die verbreiteten Fehler (Endadresse `$C3C6`, 0 benutzte Einträge, freie Plätze, Offset hinter dem Ende), kein T64; **500 Mutationen**; `loadProgramSpec` |
+| `crt` | Kopf und Pakete, Hardwarenamen, Modi; beschädigte Pakete; **400 Mutationen**; 8K-Modul mit `CBM80` in der Maschine (Kaltstartvektor, ROML nur bei `LORAM`+`HIRAM`, Schreiben ins RAM darunter, läuft), 16K (ROMH statt BASIC, auch ein 16K-Paket bei `$8000`), Ultimax (RESET-Vektor des Moduls, nicht angeschlossene Bereiche, kein KERNAL), Bank-umschaltender Typ wird mit Namen abgelehnt |
 | `cli_monitor` | `examples/monitor_session.txt` durch `m6510tool monitor`: kein Fehler, die wichtigen Ausgabezeilen sind da |
 | `cpu` | Emulator (rund 350 Prüfungen): Arithmetik und Flags (auch Dezimalmodus), Seitenfehler (`zp,X`, `(zp),Y` bei `$FF`, `JMP ($xxFF)`), Zyklen (Seitenzuschlag, Verzweigungen), Stapel, `JSR`/`RTS`, `BRK`/`RTI`, IRQ mit Verzögerung nach `CLI`, NMI, `JAM`, Breakpoints/Watchpoints/`runUntil`/`stepOver`/`runUntilReturn`/`call` (falsches „returned“), Hooks (Ausführungs-, Lese-, Schreib-Hook mit dem doppelten Schreiben von `INC`), Prozessorport, Zustand; Abgleich mit dem Dekoder für alle Opcodes |
 
@@ -41,8 +44,6 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 
 | Suite | Inhalt | MS |
 |---|---|---|
-| `d64`, `t64`, `crt` | Leser: selbst gebaute Images (Dateiketten, Verzeichnis über mehrere Sektoren, 40 Spuren, Fehlerbytes), beschädigte Images ohne Absturz | 0.6 |
-| `unpack` | selbstentpackendes Programm (Packer in Python, Entpacker in 6510-Assembler): `run_until_unpacked`, Speicherauszug = Original, Weg über ein D64 | 0.6 |
 | `robustness` | Eingaben von außen: JSON-Parser, Server mit zufälligen Befehlen und Argumenten jedes JSON-Typs, PRG/P00/T64/D64/CRT/Snapshot/Projektdateien mit Mutationen: nur dokumentierte Fehler, nie ein Absturz | ab 0.3 |
 
 Der Roundtrip-Test beweist die Konsistenz von Dekoder und Assembler **untereinander**. Gegen gemeinsame Denkfehler schützen
@@ -61,7 +62,7 @@ python3 tools/crosscheck_da65.py build/m6510_dump_forms
 |---|---|---|---|---|
 | Assembler (und Opcode-Tabelle) | `ca65`+`ld65` (cc65, `--cpu 6502X`) | für jede Vorzugsform der Tabelle ein Befehl mit typischem Operanden, dazu die erzwungen absoluten Formen (`LDA.W $0012` = `lda a:$0012`): gleiche Bytes und der erwartete Opcode | `tools/crosscheck_ca65.py` | CI-Job `crosscheck`: 274 Fälle, 0 Abweichungen (`LXA`, `USBC` kennt ca65 nicht) |
 | Dekoder | `da65` (cc65, `--cpu 6502x`) | alle 256 Opcodes einzeln: Mnemonic, Adressierungsart (aus der Operandenschreibweise), Länge; ein dokumentierter Opcode, den da65 nicht kennt, ist ein Fehler | `tools/crosscheck_da65.py` | CI-Job `crosscheck` |
-| D64-Leser | `c1541` (VICE) | Zufallsdisketten: Verzeichnis und Dateien byte-genau | `tools/crosscheck_d64.py` | geplant (0.6) |
+| D64-Leser | `c1541` (VICE) | c1541 formatiert und beschreibt eine Diskette (24 Dateien, Blockgrenzen, Verzeichnis über mehrere Sektoren); Verzeichnis, freie Blöcke und jede Datei byte-genau | `tools/crosscheck_c1541.py` | CI-Job `c1541` |
 
 `tools/dump_forms.cpp` (`m6510_dump_forms`, mit `-DM6510_BUILD_TOOLS=ON`) gibt die Opcode-Tabelle für die Skripte aus.
 Bewusste Unterschiede zählen die Skripte getrennt: Namen werden umgesetzt (cc65: `SBX` = `AXS`; da65 zusätzlich `ANE` = `XAA`, `SHA` = `AHX`, `LXA` = `LAX #`, `USBC` = `SBC` mit `$EB`); Befehle, die cc65
@@ -92,4 +93,4 @@ jeweils die Lizenz geprüft und hier vermerkt. Echte C64-ROMs werden in der CI n
 
 `.github/workflows/ci.yml`: Build und Tests auf Linux (mit `-Werror`), macOS und Windows, dazu ein Lauf mit
 AddressSanitizer/UBSan. Fehlgeschlagene Schritte werden mit `tools/ci_annotate.py` als Annotation sichtbar gemacht.
-Dazu die Jobs `crosscheck` (ca65/da65), `singlestep` (Harte) und `functional` (Dormann). Geplant: D64 gegen `c1541` (0.6).
+Dazu die Jobs `crosscheck` (ca65/da65), `c1541` (D64), `singlestep` (Harte) und `functional` (Dormann).

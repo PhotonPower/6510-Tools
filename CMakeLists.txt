@@ -44,6 +44,8 @@ add_library(m6510core STATIC
   src/analysis.cpp
   src/annotations.cpp
   src/assembler.cpp
+  src/crt.cpp
+  src/d64.cpp
   src/c64.cpp
   src/cpu.cpp
   src/decoder.cpp
@@ -62,6 +64,7 @@ add_library(m6510core STATIC
   src/petscii.cpp
   src/session.cpp
   src/session_analysis.cpp
+  src/t64.cpp
   src/snapshot.cpp
   src/video.cpp)
 target_include_directories(m6510core PUBLIC include)

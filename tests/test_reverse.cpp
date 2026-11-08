@@ -114,6 +114,32 @@ int main() {
         CHECK(!a.setData(l));
         CHECK(a.dataAt(0xC203) != nullptr);  // the partner side
         CHECK(a.dataCovering(0xC205) != nullptr);
+        // a placeholder (plain bytes without a name) is split around a named region inside it
+        DataRegion ph;
+        ph.address = 0xE000;
+        ph.length = 0x2000;
+        ph.comment = "RAM under the KERNAL";
+        CHECK(!a.setData(ph));
+        DataRegion grid;
+        grid.address = 0xFF96;
+        grid.length = 54;
+        grid.name = "room_grid";
+        CHECK(!a.setData(grid));
+        CHECK_EQ(a.dataAt(0xE000)->length, 0x1F96U);
+        CHECK_EQ(a.dataAt(0xE000)->comment, std::string("RAM under the KERNAL"));
+        CHECK_EQ(a.dataAt(0xFF96)->name, std::string("room_grid"));
+        CHECK_EQ(a.dataAt(0xFFCC)->length, 0x34U);
+        CHECK(a.dataAt(0xFFCC)->comment.empty());
+        DataRegion head;                              // at the start of a placeholder: the rest stays a placeholder
+        head.address = 0xE000;
+        head.length = 0x10;
+        head.name = "head";
+        CHECK(!a.setData(head));
+        CHECK_EQ(a.dataAt(0xE010)->length, 0x1F86U);
+        DataRegion clash = grid;                      // a named region is not split
+        clash.address = 0xFF90;
+        clash.name = "other";
+        CHECK(a.setData(clash).has_value());
         CHECK(a.dataCovering(0xC206) == nullptr);
         a.setComment(0xC000, "hello");
         a.setBlockComment(0xC000, "block");
@@ -312,6 +338,134 @@ table:  .FILL 20
         r = listing(p, an, ann, true);
         CHECK(r.verified);
         CHECK(has(r.text, "count:\n        .BYTE $00                       ; $" + hexDigits(sym(p, "counter"), 4) + ": how often main ran"));
+    }
+
+    // ---- a range that covers the I/O and KERNAL areas: chips, KERNAL entries and colour RAM keep their names --------------
+    {
+        Memory mem;
+        AssemblerOptions o;
+        const AssemblyResult ar = assemble(" * = $C000\nmain: INC $D020\n STA $D850,X\n JSR $FFD2\n JSR $DD03\n JSR $FFBA\n RTS\n", o);
+        for (const Segment& seg : ar.segments) mem.load(seg.address, seg.bytes);
+        mem.write8(0xDD03, 0x60);  // RAM under the CIA (the program calls the register, which holds RTS)
+        Annotations ann;
+        DataRegion io;
+        io.address = 0xD000;
+        io.length = 0x3000;
+        io.name = "ram_d000";
+        CHECK(!ann.setData(io));
+        Analysis an(mem, 0xC000, 0x10000);
+        an.setDataBarrier([&ann](Address a) { return ann.dataCovering(a) != nullptr; });
+        an.addEntry(0xC000);
+        an.analyzeFlow();
+        CHECK(!an.isCode(0xDD03));
+        ListingOptions lo;
+        lo.from = 0xC000;
+        lo.to = 0x10000;
+        const ListingResult r = renderListing(mem, an, ann, lo);
+        CHECK(r.verified);
+        if (!r.verified) std::cerr << r.problem << "\n";
+        CHECK(has(r.text, "INC EXTCOL"));
+        CHECK(has(r.text, "STA COLRAM+$50,X"));
+        CHECK(has(r.text, "JSR CHROUT"));
+        CHECK(has(r.text, "JSR CI2DDRB") || has(r.text, "JSR C2DDRB"));
+        CHECK(!has(r.text, "data_D020"));
+        // a name the user gives wins (the program banks the ROM out and keeps a table there), in an excerpt as well
+        VariableDoc v;
+        v.address = 0xD850;
+        v.name = "row_colours";
+        v.size = 0x40;
+        CHECK(!ann.setVariable(v));
+        lo.to = 0xC00C;
+        const ListingResult e = renderListing(mem, an, ann, lo);
+        CHECK(e.verified);
+        CHECK(has(e.text, "STA row_colours,X"));
+        CHECK(has(e.text, "INC EXTCOL"));
+        VariableDoc grid;                          // a table in the RAM under the KERNAL jump table
+        grid.address = 0xFF96;
+        grid.name = "room_grid";
+        grid.size = 54;
+        CHECK(!ann.setVariable(grid));
+        lo.to = 0xC00F;
+        CHECK(has(renderListing(mem, an, ann, lo).text, "JSR SETLFS"));
+        lo.to = 0x10000;
+        CHECK(!has(renderListing(mem, an, ann, lo).text, "data_FFBA"));
+        // ... and inside a large plain region it gets a line and a label of its own
+        lo.to = 0x10000;
+        const ListingResult f = renderListing(mem, an, ann, lo);
+        CHECK(f.verified);
+        CHECK(has(f.text, "row_colours:"));
+        CHECK(has(f.text, "STA row_colours,X"));
+        // an operand pointing into the middle of a named table: name+offset, no data_XXXX label inside the table
+        DataRegion tab;
+        tab.address = 0xC100;
+        tab.length = 0x100;
+        tab.name = "speech_table";
+        CHECK(!ann.setData(tab));
+        Memory m2 = mem;
+        const AssemblyResult a2 = assemble(" * = $C000\n LDA $C110\n RTS\n", o);
+        for (const Segment& seg : a2.segments) m2.load(seg.address, seg.bytes);
+        Analysis an2(m2, 0xC000, 0x10000);
+        an2.setDataBarrier([&ann](Address x) { return ann.dataCovering(x) != nullptr; });
+        an2.addEntry(0xC000);
+        an2.analyzeFlow();
+        const ListingResult g = renderListing(m2, an2, ann, lo);
+        CHECK(g.verified);
+        CHECK(has(g.text, "LDA speech_table+$10"));
+        CHECK(!has(g.text, "data_C110"));
+        VariableDoc vec;                           // inside a named variable of two bytes
+        vec.address = 0xC10E;
+        vec.name = "jump_vec";
+        vec.size = 2;
+        (void)ann.removeLabel(0xC100);
+        CHECK(!ann.setVariable(vec));
+        Memory m3 = mem;
+        const AssemblyResult a3 = assemble(" * = $C000\n STA $C10F\n RTS\n", o);
+        for (const Segment& seg : a3.segments) m3.load(seg.address, seg.bytes);
+        Analysis an3(m3, 0xC000, 0x10000);
+        an3.setDataBarrier([&ann](Address x) { return ann.dataCovering(x) != nullptr; });
+        an3.addEntry(0xC000);
+        an3.analyzeFlow();
+        const ListingResult h = renderListing(m3, an3, ann, lo);
+        CHECK(h.verified);
+        CHECK(has(h.text, "STA jump_vec+1"));
+        // a table of words that point at named data shows the names
+        DataRegion ptrs;
+        ptrs.address = 0xC200;
+        ptrs.length = 4;
+        ptrs.kind = DataKind::Words;
+        ptrs.name = "record_ptrs";
+        m3.write8(0xC200, 0x10);
+        m3.write8(0xC201, 0xC1);
+        m3.write8(0xC202, 0x34);
+        m3.write8(0xC203, 0x12);
+        DataRegion rec;
+        rec.address = 0xC110;
+        rec.length = 4;
+        rec.name = "record_0";
+        CHECK(!ann.setData(ptrs));
+        CHECK(!ann.setData(rec));
+        const ListingResult w = renderListing(m3, an3, ann, lo);
+        CHECK(w.verified);
+        CHECK(has(w.text, ".WORD record_0,$1234"));
+        // wrapping: long comments become comment lines of at most `wrap` characters, and the listing still verifies
+        std::string longText;
+        for (int k = 0; k < 40; ++k) longText += "Wort" + std::to_string(k) + " ";
+        ann.setComment(0xC000, longText);
+        rec.comment = longText;
+        CHECK(!ann.setData(rec));
+        ListingOptions wo = lo;
+        wo.wrap = 100;
+        const ListingResult wr = renderListing(m3, an3, ann, wo);
+        CHECK(wr.verified);
+        std::size_t longest = 0;
+        for (std::size_t pos = 0, nl; pos < wr.text.size(); pos = nl + 1) {
+            nl = wr.text.find('\n', pos);
+            if (nl == std::string::npos) nl = wr.text.size();
+            longest = std::max(longest, nl - pos);
+        }
+        CHECK(longest <= 100);
+        CHECK(has(wr.text, "Wort39"));
+        CHECK(has(wr.text, "        STA jump_vec+1"));
     }
 
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------

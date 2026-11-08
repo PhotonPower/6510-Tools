@@ -1,5 +1,8 @@
 #include "m6510/image_io.hpp"
 
+#include "m6510/d64.hpp"
+#include "m6510/t64.hpp"
+
 #include <cctype>
 #include <fstream>
 #include <iterator>
@@ -94,5 +97,38 @@ Program loadProgramFile(const std::string& path) {
 }
 
 void loadProgram(Memory& memory, const Program& program) { memory.load(program.address, program.bytes); }
+
+std::optional<std::pair<std::string, std::string>> splitImageSpec(const std::string& spec) {
+    auto isImage = [](const std::string& p) {
+        const std::string e = fileExtension(p);
+        return e == ".d64" || e == ".t64";
+    };
+    if (isImage(spec)) return std::make_pair(spec, std::string("*"));
+    const std::size_t colon = spec.rfind(':');
+    if (colon != std::string::npos && colon > 0 && isImage(spec.substr(0, colon))) return std::make_pair(spec.substr(0, colon), spec.substr(colon + 1));
+    return std::nullopt;
+}
+
+Program loadProgramSpec(const std::string& spec, std::string* description) {
+    const auto image = splitImageSpec(spec);
+    if (!image) {
+        if (description) *description = spec;
+        return loadProgramFile(spec);
+    }
+    const auto& [path, name] = *image;
+    if (fileExtension(path) == ".d64") {
+        const D64Image disk(readBinaryFile(path));
+        const auto entry = disk.find(name.empty() ? "*" : name);
+        if (!entry) throw IoError("no file matching \"" + name + "\" on " + path);
+        if (entry->type != "PRG") throw IoError("\"" + entry->name + "\" on " + path + " is a " + entry->type + " file, not a program");
+        if (description) *description = path + ": \"" + entry->name + "\" (PRG, " + std::to_string(entry->blocks) + " blocks)";
+        return disk.readProgram(*entry);
+    }
+    const T64Image tape(readBinaryFile(path));
+    const auto entry = tape.find(name.empty() ? "*" : name);
+    if (!entry) throw IoError("no file matching \"" + name + "\" in " + path);
+    if (description) *description = path + ": \"" + entry->name + "\" (" + std::to_string(entry->length) + " bytes)";
+    return tape.readProgram(*entry);
+}
 
 }  // namespace m6510

@@ -3,7 +3,7 @@
 > **Stand 0.5:** umgesetzt – Analyse, Sprungtabellen, Datentypen, Annotationen, verifiziertes Listing und Screenshots im
 > Server (`m6510tool serve`, [agent-protocol.md](agent-protocol.md#reverse-engineering-reverse-engineeringmd)), der
 > Orchestrator `agent/m6510_annotate.py` und `agent/m6510_drive.py` (getestet gegen einen Mock-Ollama, noch nicht mit einem
-> echten Modell erprobt). D64 als Quelle kommt mit 0.6. Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
+> echten Modell erprobt). D64/T64 als Quelle seit 0.6 (`--prg disk.d64:NAME`). Vorbild sind `agent/z80_annotate.py` (mit Screenshots für Qwen3-VL) und
 > `agent/m68k_annotate.py` / `agent/m68k_drive.py` (Analyse, Sprungtabellen, Datentypen, Blindtest-Befunde) der
 > Schwesterprojekte. Was sich dort bewährt hat, wird übernommen; dieses Dokument nennt die 6510-spezifischen Teile.
 
@@ -46,12 +46,13 @@ zurückgerollt (inklusive Farb-RAM, Bausteinregistern und KERNAL-Zustand).
 python3 agent/m6510_annotate.py --prg spiel.prg --project spiel.m6510proj.json --out spiel_kommentiert.asm \
         --lang Deutsch --model qwen3-vl:8b-instruct --log spiel.log.jsonl --report luecken.md
 python3 agent/m6510_annotate.py --prg spiel.prg --dry-run            # Analyse ohne Modell: Reihenfolge, Tabellen, Token-Schätzung
+python3 agent/m6510_annotate.py --prg "disk.d64:SPIEL" …              # direkt aus einem Diskettenabbild (auch band.t64:NAME)
 python3 agent/m6510_annotate.py --bin teil.bin --org 0xC000 --machine generic --entry 0xC000
 ```
 
 | Option | Wirkung |
 |---|---|
-| `--prg` / `--bin` + `--org` | Programm (PRG/P00; `--org` verschiebt) bzw. Raw-Datei an eine Adresse |
+| `--prg` / `--bin` + `--org` | Programm (PRG/P00 oder `disk.d64:NAME`/`band.t64:NAME`; `--org` verschiebt) bzw. Raw-Datei an eine Adresse |
 | `--machine c64\|generic` | C64 mit KERNAL-Emulation (Standard) oder 64 KiB RAM ohne I/O |
 | `--entry` | Einstiegspunkte (mehrfach); Standard: `SYS`-Adresse des BASIC-Starters, sonst die Ladeadresse |
 | `--project`, `--out`, `--report`, `--log` | Projektdatei (wird nach jeder Routine gespeichert, beim Start geladen), Listing, Lückenbericht, Protokoll |
@@ -60,6 +61,9 @@ python3 agent/m6510_annotate.py --bin teil.bin --org 0xC000 --machine generic --
 | `--only` | nur diese Routine(n) |
 | `--no-auto-tables`, `--no-auto-data` | vorgeschlagene Zeigertabellen nicht verfolgen bzw. erkannte Daten nicht markieren |
 | `--lang` | Sprache der Kommentare |
+| `--snapshot` + `--from`/`--to` | einen gesicherten Maschinenzustand als Ausgangspunkt (z. B. ein laufendes Spiel nach dem Entpacken); `--from`/`--to` geben den Bereich des Programms im Speicher an |
+| `--hints datei.json` | ausgeführte Adressen (`{"cmd":"executed","addresses":true}` nach Spielläufen mit `track_execution`) als Hinweise für Code, den der Codefluss nicht erreicht |
+| `--attach` | Disketten-/Bandabbild oder Datei für `LOAD` (Programme, die nachladen) |
 
 Werkzeuge des Modells: `get_listing`, `disassemble`, `read_memory` (mit PETSCII- und Bildschirmcode-Spalte), `run_routine`
 (Register, Speicher, `setup`-Routinen, `screenshot`, `as_interrupt`), `screenshot`, `reset_machine`, `name_label`,
@@ -125,7 +129,9 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
 ## Ohne Modell: von Hand oder durch einen Agenten
 
 `agent/m6510_drive.py` (wie `m68k_drive.py`): dieselben Werkzeuge, Berichte und Prüfungen, aber ein Schritt je Aufruf, Zustand
-in einem Arbeitsverzeichnis (`init`, `status`, `show`, `tool`, `finish`, `listing`, `report`). Für einen Agenten oder einen
+in einem Arbeitsverzeichnis (`init`, `status`, `show`, `tool`, `finish`, `listing`, `report`). Jeder Befehl sperrt das
+Arbeitsverzeichnis: Mehrere Agenten können parallel an verschiedenen Routinen desselben Programms arbeiten und sehen dabei die
+Namen der anderen. Für einen Agenten oder einen
 Menschen, der die Rolle des Modells übernimmt. Anleitung: [walkthrough.md](walkthrough.md).
 
 ## Projektdateien

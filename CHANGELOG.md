@@ -7,6 +7,34 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Meilenstein 0.6 – Images und Entpacken:**
+  - **D64** lesen (35/40 Spuren, mit/ohne Fehlerbytes; BAM, Verzeichnis, Dateiketten mit Prüfung auf Schleifen, Zeiger
+    außerhalb und falsche Größen), **T64** lesen (verbreitete Fehler toleriert und gemeldet), **CRT** lesen (Hardwaretypen
+    mit Namen); `m6510tool d64 info|ls|extract|boot|block`, `t64 ls|extract`, `crt info|extract`.
+  - `disk.d64:NAME`/`band.t64:NAME` überall, wo ein Programm gelesen wird (`dis`, `basic list`, Monitor `l`, `load_file` mit
+    `name`, Orchestrator `--prg`); `attach` eines D64/T64 für `LOAD` über die KERNAL-Emulation.
+  - **Cartridges** (CRT-Typ 0) in der C64-Maschine: 8K, 16K, Ultimax (`C64::insertCartridge`), Start über den
+    Kaltstartvektor (`CBM80`) bzw. den RESET-Vektor des Moduls.
+  - **Selbstentpackende Programme:** `Cpu::trackWrites`/`watchWrittenCode`, Protokollbefehle `track_writes`, `written`,
+    `run_until_unpacked` (mit `continue` für mehrstufige Packer, `ignore`), `save_memory` (PRG oder roh, CPU- oder RAM-Sicht).
+  - **Alle vier CIA-Timer** (Timer A/B beider CIAs, einmalig/fortlaufend, B zählt A, IRQ bzw. flankengesteuerter NMI);
+    Snapshot-Format Version 2 (liest Version 1 weiter). **Joysticks und Tastaturmatrix** an den CIA-Ports (`input`).
+    **Codeabdeckung:** `Cpu::trackExecution`, `track_execution`/`executed`, `analyze` mit `use_executed` (Code, den nur die
+    Ausführung zeigt, bekommt eigene Routinen). KERNAL-Emulation: die Vektortabelle bei `$FD30` (Programme kopieren sie
+    direkt), `$E544` (Bildschirm löschen) und `$E566` (Cursor nach Hause) nachgebildet. Gefunden an einem echten Spiel
+    (Impossible Mission: Sprachausgabe über CIA-2-NMI, Vorspann kopiert die Vektoren aus dem ROM).
+  - Listing: Chipregister, KERNAL-Einsprünge und Farb-RAM behalten ihre Namen auch innerhalb eines analysierten Bereichs bis
+    `$FFFF`; vom Benutzer vergebene Namen gewinnen aber immer (Programme, die das ROM ausblenden und das RAM darunter nutzen).
+    Datenbereiche der Art `bytes` werden an Variablen, Sprungzielen und Kommentaren in eigene Zeilen geteilt.
+  - Listing: Option `wrap` (lange Kommentare umbrechen); Tabellen der Art `words` zeigen die Namen benannter Ziele; Verweise in
+    benannte Datenbereiche und mehrbytige Variablen als `name+n` ohne Platzhalter-Label; keine Labels für Sprünge auf
+    Systemadressen, für Ziele nicht dargestellter Tabellen und für als Konstante markierte Immediates. Benannte Datenbereiche
+    teilen namenlose Platzhalterbereiche (z. B. „RAM unter dem KERNAL“) auf; KERNAL-Sprungtabelle schlägt überdeckende Variablen.
+  - Vollständigkeitsprüfung des Orchestrators: Ausdrücke wie `COLRAM+$287` gelten nicht mehr als unbenannte Adresse.
+  - Orchestrator: `--snapshot` mit `--from/--to`, `--hints` (ausgeführte Adressen), `--attach`; `analyze` mit `hints`,
+    `executed` mit `addresses`; `m6510_drive.py` sperrt das Arbeitsverzeichnis je Befehl (mehrere Agenten parallel).
+  - Tests `d64`, `t64`, `crt` (selbst gebaute Images, Hunderte Mutationen), `test_unpack.py` (Packer in Python, Entpacker in
+    6510-Assembler: ein-/zweistufig, über ein D64); Kreuzprüfung gegen `c1541` (VICE) als CI-Job.
 - **Meilenstein 0.5, erster Teil – der Bildschirm als Bild:** `renderScreen` (VIC-II aus dem Speicherzustand: Standard-,
   Multicolor- und Extended-Background-Text, Hires- und Multicolor-Bitmap, Rahmen, Bild aus, 38 Spalten/24 Zeilen,
   Feinscrolling, VIC-Bank, Zeichensatz-ROM in Bank 0/2), selbst gezeichneter **Ersatzzeichensatz** (`tools/make_font.py`),

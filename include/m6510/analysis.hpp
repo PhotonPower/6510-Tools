@@ -78,6 +78,9 @@ public:
     void setDataBarrier(std::function<bool(Address)> isData) { isData_ = std::move(isData); }
 
     void addEntry(Address address);
+    /// An address known to be the start of an instruction (e.g. executed in the emulator): followed like an entry, but not a
+    /// routine of its own. After the flow, code that only such hints reach gets a routine at the start of each block.
+    void addCodeHint(Address address);
     void analyzeFlow();                                ///< follow the flow from all entry points (and found tables)
     void analyzeLinear(Address from, std::uint32_t to);  ///< decode sequentially
 
@@ -142,6 +145,8 @@ private:
     std::map<Address, std::pair<Address, bool>> immediates_;
     std::map<Address, std::set<Address>> selfMod_;
     std::map<Address, Address> vectorEntries_;
+    std::set<Address> codeHints_;
+    void adoptOrphans();
 };
 
 }  // namespace m6510

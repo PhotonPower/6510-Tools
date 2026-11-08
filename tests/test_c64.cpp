@@ -243,7 +243,8 @@ int main() {
             "        LDA #1\n LDX #8\n LDY #1\n JSR $FFBA\n"           // SETLFS
             "        LDA #0\n JSR $FFD5\n"                             // LOAD
             "        STX endlo\n STY endhi\n"
-            "        JSR $E544\n"                                      // unknown entry
+            "        JSR $E544\n"                                      // clear screen: emulated
+            "        JSR $E5A0\n"                                      // unknown entry
             "        BRK\n"
             "name:   .BYTE \"DATA\"\n"
             "endlo:  .BYTE 0\nendhi: .BYTE 0\n",
@@ -257,8 +258,16 @@ int main() {
         CHECK_EQ(m.ram.read8(static_cast<Address>(m.symbols["endhi"])), Byte{0x30});
         const auto calls = m.kernal.takeCalls();
         bool sawUnknown = false;
-        for (const auto& c : calls) sawUnknown = sawUnknown || (c.address == 0xE544 && !c.emulated && c.name.empty());
+        bool sawClear = false;
+        for (const auto& c : calls) {
+            sawUnknown = sawUnknown || (c.address == 0xE5A0 && !c.emulated && c.name.empty());
+            sawClear = sawClear || (c.address == 0xE544 && c.emulated && c.name == "CLRSCR");
+        }
         CHECK(sawUnknown);
+        CHECK(sawClear);
+        // the vector table of RESTOR can be read from the KERNAL image
+        CHECK_EQ(m.c64.peek(0xFD30), Byte{0x31});
+        CHECK_EQ(m.c64.peek(0xFD31), Byte{0xEA});
         // file not found: C = 1, A = 4
         m.load(" LDA #1\n LDX #<n\n LDY #>n\n JSR $FFBD\n LDA #0\n JSR $FFD5\n RTS\nn: .BYTE \"X\"", 0xC100);
         m.kernal.startProgram(0xC100);
@@ -290,6 +299,122 @@ int main() {
         m.c64.write(0xD020, 7);
         m.c64.setState(cs);
         CHECK_EQ(m.c64.vic(0x20), Byte{5});
+    }
+
+    // ---- CIA timers: both timers of both CIAs, one-shot, continuous, B counting A, IRQ and NMI ------------------
+    {
+        Machine m(false);
+        m.cpu.setPortEnabled(true);
+        m.c64.write(0x0001, 0x35);
+        m.c64.resetChips();
+        // CIA 2 timer B, one-shot, 1000 cycles: a busy loop waits until it has stopped (as a speech driver does)
+        m.load(" .CPU 6510X\n LDA #<1000\n STA $DD06\n LDA #>1000\n STA $DD07\n LDA #$19\n STA $DD0F\n"
+               "wait: LDA $DD0F\n AND #1\n BNE wait\n JAM", 0xC000);
+        m.cpu.registers().pc = 0xC000;
+        RunResult r = m.cpu.run(100000);
+        CHECK(r.reason == StopReason::Halted);
+        CHECK(r.cycles > 1000 && r.cycles < 1100);
+        CHECK_EQ(m.c64.peek(0xDD0D) & 0x02, 0x02);  // underflow flag of timer B
+        // timer values count down while running and stand still when stopped
+        m.c64.write(0xDC06, 0x00);
+        m.c64.write(0xDC07, 0x10);  // latch $1000; the high byte loads the stopped timer
+        CHECK_EQ(m.c64.peek(0xDC07), Byte{0x10});
+        m.c64.write(0xDC0F, 0x01);  // start, continuous
+        m.cpu.addCycles(0);
+        CpuState st = m.cpu.state();
+        st.cycles += 0x100;
+        m.cpu.setState(st);
+        CHECK_EQ(m.c64.peek(0xDC07), Byte{0x0F});
+        m.c64.write(0xDC0F, 0x00);  // stop
+        const Byte frozen = m.c64.peek(0xDC06);
+        st.cycles += 0x200;
+        m.cpu.setState(st);
+        CHECK_EQ(m.c64.peek(0xDC06), frozen);
+        // timer B counting the underflows of timer A: A = 9 (period 10 cycles), B = 4 -> B underflows after 50 cycles
+        Machine n(false);
+        n.c64.resetChips();
+        n.c64.write(0xDC04, 9);
+        n.c64.write(0xDC05, 0);
+        n.c64.write(0xDC06, 4);
+        n.c64.write(0xDC07, 0);
+        n.c64.write(0xDC0F, 0x41);  // B: count A underflows, start
+        n.c64.write(0xDC0E, 0x11);  // A: force load, start
+        n.load("loop: NOP\n JMP loop", 0xC000);
+        n.cpu.registers().pc = 0xC000;
+        n.cpu.run(10);  // 10 x 3 or 2 cycles = 25 cycles: no B underflow yet
+        CHECK_EQ(n.c64.peek(0xDC0D) & 0x02, 0);
+        n.cpu.run(20);
+        CHECK_EQ(n.c64.peek(0xDC0D) & 0x03, 0x03);
+        // CIA 2 timer A with NMI: the handler counts, the NMI is an edge (one per underflow, after the ICR is read)
+        Machine q(false);
+        q.cpu.setPortEnabled(true);
+        q.c64.write(0x0001, 0x35);  // KERNAL out: the hardware vectors are RAM
+        q.c64.resetChips();
+        q.load("main: LDA #<99\n STA $DD04\n LDA #0\n STA $DD05\n LDA #$81\n STA $DD0D\n LDA #$11\n STA $DD0E\n"
+               "loop: JMP loop\n"
+               "nmi: INC $10\n BIT $DD0D\n RTI", 0xC000);
+        q.ram.write16(0xFFFA, static_cast<Address>(q.symbols["nmi"]));
+        q.cpu.registers().pc = 0xC000;
+        r = q.cpu.run(20000);
+        // one NMI per 100 cycles (latch 99): the counter byte wraps, the interrupt count does not
+        const std::uint64_t expected = r.cycles / 100;
+        CHECK(q.cpu.interruptCount() + 2 >= expected && q.cpu.interruptCount() <= expected + 1);
+        CHECK_EQ(q.ram.read8(0x10), static_cast<Byte>(q.cpu.interruptCount()));
+        // without acknowledging the ICR the line stays low: only one NMI
+        Machine z(false);
+        z.cpu.setPortEnabled(true);
+        z.c64.write(0x0001, 0x35);
+        z.c64.resetChips();
+        z.load("main: LDA #<99\n STA $DD04\n LDA #0\n STA $DD05\n LDA #$81\n STA $DD0D\n LDA #$11\n STA $DD0E\n"
+               "loop: JMP loop\nnmi: INC $10\n RTI", 0xC000);
+        z.ram.write16(0xFFFA, static_cast<Address>(z.symbols["nmi"]));
+        z.cpu.registers().pc = 0xC000;
+        z.cpu.run(20000);
+        CHECK_EQ(z.ram.read8(0x10), Byte{1});
+    }
+
+    // ---- input: joystick bits and the keyboard matrix as the CIA ports see them ------------------------------
+    {
+        Machine m(false);
+        m.c64.resetChips();
+        CHECK_EQ(m.c64.peek(0xDC00), Byte{0xFF});
+        m.c64.setJoystick(2, 0x10 | 0x08);  // fire + right
+        CHECK_EQ(m.c64.peek(0xDC00), Byte{0xFF & ~0x18});
+        m.c64.setJoystick(1, 0x01);
+        CHECK_EQ(m.c64.peek(0xDC01) & 0x1F, 0x1E);
+        m.c64.setJoystick(1, 0);
+        // SPACE is column 7, row 4: visible when column 7 is selected (PA7 low), not otherwise
+        unsigned col = 0, row = 0;
+        CHECK(C64::keyPosition("space", col, row));
+        CHECK_EQ(col, 7U);
+        CHECK_EQ(row, 4U);
+        CHECK(!C64::keyPosition("nokey", col, row));
+        m.c64.setKey(7, 4, true);
+        m.c64.write(0xDC02, 0xFF);  // port A: all outputs
+        m.c64.write(0xDC00, 0x7F);  // column 7 selected
+        CHECK_EQ(m.c64.peek(0xDC01), Byte{0xEF});
+        m.c64.write(0xDC00, 0xFE);  // column 0 selected
+        CHECK_EQ(m.c64.peek(0xDC01), Byte{0xFF});
+        m.c64.write(0xDC00, 0x00);  // all columns
+        CHECK_EQ(m.c64.peek(0xDC01), Byte{0xEF});
+        CHECK_EQ(m.c64.pressedKeys().size(), std::size_t{1});
+        m.c64.releaseAllKeys();
+        CHECK_EQ(m.c64.peek(0xDC01), Byte{0xFF});
+    }
+
+    // ---- execution tracking --------------------------------------------------------------------------------------
+    {
+        Machine m(false);
+        m.load(" .CPU 6510X\nstart: LDX #3\nloop: DEX\n BNE loop\n JAM", 0xC000);
+        m.cpu.registers().pc = 0xC000;
+        m.cpu.trackExecution(true);
+        m.cpu.run(100);
+        CHECK(m.cpu.executed(0xC000));
+        CHECK(m.cpu.executed(0xC002));
+        CHECK(!m.cpu.executed(0xC001));
+        CHECK_EQ(m.cpu.executedAddresses().size(), std::size_t{4});
+        m.cpu.trackExecution(false);
+        CHECK(!m.cpu.executed(0xC000));
     }
 
     return finish("c64");
