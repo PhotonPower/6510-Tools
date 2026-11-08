@@ -89,7 +89,7 @@ EasyFlash, Action Replay …) sind eine Idee für später; ihre Bänke lassen si
 
 ## Snapshot (`M6510SN1`)
 
-Eigenes Format für `save_state`/`load_state` (später auch Monitor `savestate`/`loadstate`), alle Zahlen Little-Endian:
+Eigenes Format für `save_state`/`load_state` (auch Monitor `savestate`/`loadstate`), alle Zahlen Little-Endian:
 
 | Teil | Inhalt |
 |---|---|

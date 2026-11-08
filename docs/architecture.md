@@ -1,8 +1,9 @@
 # Architektur
 
 > Die Struktur entspricht den Schwesterprojekten [Z80](https://github.com/PhotonPower/Z80) und
-> [MC68000](https://github.com/PhotonPower/MC68000). **Stand 0.2:** umgesetzt sind die Grundbausteine, Opcode-Tabelle,
-> Dekoder, Ausdrucksauswerter, Encoder, Assembler, Disassembler, PETSCII/BASIC und PRG/P00 (Spalte „Stand“).
+> [MC68000](https://github.com/PhotonPower/MC68000). **Stand 0.4:** umgesetzt sind die Grundbausteine, Opcode-Tabelle,
+> Dekoder, Ausdrucksauswerter, Encoder, Assembler, Disassembler, PETSCII/BASIC, PRG/P00 (0.2), Prozessorkern, C64-Maschine,
+> KERNAL-Emulation, Snapshots, Sitzung (0.3) und Monitor (0.4); Spalte „Stand“.
 
 ## Überblick
 
@@ -35,8 +36,9 @@ flowchart LR
 ```
 
 Die Bibliothek `m6510core` hat **keine** Konsolenausgabe und keinen globalen Zustand; alle Klassen sind unabhängige
-Instanzen. `app/main.cpp` ist die einzige Stelle mit Ein-/Ausgabe auf Stdin/Stdout und mit Dateinamen. Monitor und
-Agenten-Schnittstelle sind weitere Frontends derselben Bibliothek.
+Instanzen. `app/main.cpp` ist die einzige Stelle mit Ein-/Ausgabe auf Stdin/Stdout. Monitor (`Monitor`) und
+Agenten-Schnittstelle (`Session`) sind weitere Frontends derselben Bibliothek und teilen sich die Maschinenverwaltung
+(`Machine`); ihre Dateibefehle sind abschaltbar.
 
 ## Komponenten
 
@@ -61,11 +63,12 @@ Agenten-Schnittstelle sind weitere Frontends derselben Bibliothek.
 | `c64.hpp`                   | `C64`: Speicherkarte, Banking über `$01`, ROMs, Farb-RAM, I/O-Register mit Schreibprotokoll, Rasterzähler, Timer A | fertig |
 | `kernal.hpp`                | `Kernal`: erzeugtes KERNAL-Abbild, nachgebildete Routinen, Aufrufprotokoll              | fertig   |
 | `video.hpp`, `png.hpp`      | VIC-II-Bild aus dem Speicherzustand, PNG-Ausgabe (ohne externe Bibliothek)              | geplant  |
-| `session.hpp`               | `Session`: eine Maschine, Marken, Checkpoints; JSON-Befehle                             | fertig (ohne Analyse) |
+| `machine.hpp`               | `Machine`: Speicher, CPU, C64 und KERNAL-Emulation, Symbole, Checkpoints, Watchpoints, Dateien laden | fertig |
+| `session.hpp`               | `Session`: JSON-Befehle über einer `Machine`                                            | fertig (ohne Analyse) |
 | `analysis.hpp`              | Codefluss-Analyse: Befehle, Routinen, Aufrufgraph, KERNAL-Aufrufe, Sprungtabellen, Datentypen | geplant |
 | `annotations.hpp`           | Namen, Dokumentation, Variablen, Datenbereiche, Kommentare; JSON                        | geplant  |
 | `listing.hpp`               | verifiziertes, neu assemblierbares Listing                                              | geplant  |
-| `monitor.hpp`               | `Monitor`: Zeilenschnittstelle (`execute(zeile) → Text`), Hex-Standard                  | geplant  |
+| `monitor.hpp`               | `Monitor`: Zeilenschnittstelle (`execute(zeile) → Text`) über einer `Machine`, Hex-Standard | fertig (ohne `shot`) |
 
 Zu `session.hpp` gehören wie bei den Schwesterprojekten `src/session.cpp` (Maschine, Programm, Lauf),
 `src/session_analysis.cpp` (Analyse, Annotationen, Listing) und `src/session_impl.hpp` (interne Hilfen).

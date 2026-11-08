@@ -77,7 +77,7 @@ Gesamtzähler seit dem letzten `reset`.
 | `load_file` | `file`, `type?` (`auto`, `raw`, `prg`, `p00`), `addr?` | Datei laden (*`--allow-files`*); `raw` braucht `addr`, bei PRG/P00 verschiebt `addr`. Antwort: `start`, `end`, `entry` (`SYS`-Adresse eines BASIC-Starters bei `$0801`, sonst die Ladeadresse; der PC wird gesetzt), `basic` (erste BASIC-Zeile). D64/T64/CRT: Meilenstein 0.6 |
 | `load_rom` | `which` (`basic`, `kernal`, `char`), `file` | ROM laden (*`--allow-files`*, nur `c64`). Ein KERNAL-ROM ersetzt die Emulation (RESET aus dem ROM) |
 | `attach` | `file` (PRG/P00 oder Verzeichnis) | Quelle für `LOAD` der KERNAL-Emulation (*`--allow-files`*): eine Datei beantwortet jeden Namen, in einem Verzeichnis wird `NAME.prg` gesucht (`*` = die erste) |
-| `regs` / `set` | `regs:{"A":5,"X":"0x10","PC":"start","P":"0x24"}` | Register lesen / setzen; `PC` weckt aus `JAM` |
+| `regs` / `set` | `regs:{"A":5,"X":"0x10","PC":"start","P":"0x24"}` | Register lesen / setzen; `PC` weckt aus `JAM`; ein neues `I` in `P` gilt sofort (ohne die Verzögerung von `CLI`/`SEI`) |
 | `step` | `n?` (1), `trace?` | `n` Befehle (Haltepunkte werden übergangen); mit `trace:true` zusätzlich `trace:[{addr,bytes,text,cycles}]` (höchstens 1000) |
 | `step_over` | – | ein Befehl; bei `JSR` bis zur Rückkehr auf gleicher Stapelhöhe |
 | `run` | `until?`, `max_instructions?` | bis Haltepunkt/Watchpoint/`JAM`/Ende/Limit; mit `until` bis der PC diese Adresse erreicht |

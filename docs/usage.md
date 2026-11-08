@@ -1,7 +1,7 @@
 # Benutzung von `m6510tool`
 
-> **Stand 0.3:** `asm`, `dis`, `basic list` und `serve` sind umgesetzt. `monitor`, `d64`, `t64`, `crt` und die
-> Disassembler-Eingabe aus Images sind die Spezifikation für die Meilensteine 0.4–0.6. Optionen orientieren
+> **Stand 0.4:** `asm`, `dis`, `basic list`, `monitor` und `serve` sind umgesetzt. `d64`, `t64`, `crt` und die
+> Disassembler-Eingabe aus Images sind die Spezifikation für die Meilensteine 0.5–0.6. Optionen orientieren
 > sich an `z80tool` und `m68ktool`, damit man zwischen den Projekten nicht umlernen muss.
 
 ```sh
@@ -78,11 +78,21 @@ m6510tool t64 ls|extract band.t64 …
 m6510tool crt info  modul.crt                # Typ, Leitungen, Chips/Bänke
 ```
 
-## `monitor` – interaktiver Monitor (geplant, 0.4)
+## `monitor` – interaktiver Monitor
 
 ```sh
-m6510tool monitor [datei] [--org adresse] [--c64] [--roms verzeichnis] [--no-files]
+m6510tool monitor [datei] [--org adresse] [--c64] [--roms verzeichnis] [--no-files] [--quiet]
+m6510tool monitor < examples/monitor_session.txt
 ```
+
+| Option | Wirkung |
+|---|---|
+| `datei` | PRG/P00 (Ladeadresse aus der Datei) oder Raw (`.bin`/`.raw`, braucht `--org`) laden; PC = Ladeadresse bzw. `SYS`-Ziel |
+| `--org adresse` | Ladeadresse (überschreibt die des PRG; wie bei `asm`/`dis` dezimal, `$` für hex) |
+| `--c64` | C64-Speicherkarte mit KERNAL-Emulation statt 64 KiB RAM |
+| `--roms verzeichnis` | C64 mit eigenen ROMs (`basic*`, `kernal*`, `char*`); ein KERNAL-ROM ersetzt die Emulation |
+| `--no-files` | Dateibefehle im Monitor sperren |
+| `--quiet`, `-q` | kein Banner und kein Prompt (bei umgeleiteter Eingabe ohnehin) |
 
 Siehe [monitor.md](monitor.md).
 

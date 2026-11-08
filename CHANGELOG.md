@@ -7,6 +7,17 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Meilenstein 0.4 – Monitor** (`m6510::Monitor`, `m6510tool monitor`): klassische Eingabeschleife wie bei den
+  Schwesterprojekten, Zahlen hexadezimal (`100.` dezimal, Präfixe, Symbole, `@`-Register): `d`, `m`/`m.s`, `e`/`e.w`, `f`,
+  `c`, `t`, `h`, Assemble-Modus `a` (Labels, Zuweisungen, Direktiven), `r`, `n`, `o`, `u`, `g`, `ru`, `b`/`bc`/`w`, `limit`,
+  `sym`/`symload`/`symsave`, `asm`, `l`, `sv`, `ck`/`rb`, `savestate`/`loadstate`, `irq [on|off]`/`nmi`, `reset`, `machine`;
+  C64: `bank`, `rom`, `io`, `kernal`, `console`, `screen`, `keys`, `run`. Kommandozeile mit `--c64`, `--roms verzeichnis`
+  (VICE-Dateinamen), `--org`, `--no-files`, `--quiet`; Banner und Prompt nur am Terminal.
+  - **`m6510::Machine`:** Maschine, Symbole, Checkpoints, Watchpoints, ROMs, `attach` und Dateiladen aus der Sitzung
+    herausgelöst; Sitzung und Monitor benutzen dieselbe Klasse.
+  - Tests `monitor` (rund 8000 Prüfungen, 4000 zufällige Befehlszeilen) und `cli_monitor` mit dem Beispielskript
+    `examples/monitor_session.txt`.
+
 - **Meilenstein 0.3, zweiter und dritter Teil – Snapshots, Sitzung, C64:**
   - **`m6510::C64`:** Speicherkarte mit allen `$01`-Konfigurationen, ROMs laden, Farb-RAM, VIC-II/SID/CIA-Register mit
     Schreibprotokoll und Registernamen („Mapping the Commodore 64“), Rasterzeile und CIA-1-Timer A aus dem Zyklenzähler mit
@@ -66,3 +77,7 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 - Dokumentation unter `docs/` für den geplanten Umfang (Architektur, C64-Zielplattform, Befehlssatz, Assembler-Syntax,
   Formate, Benutzung, Emulator, Monitor, Agenten-Protokoll, Reverse Engineering, Anleitung, Entpacken, Tests, Roadmap mit
   Entscheidungsvorschlägen und offenen Fragen).
+
+### Behoben
+- `set` mit `P` (Sitzung) und `r p=…` (Monitor): Ein neues `I`-Flag galt für die Interrupt-Abfrage erst nach einem weiteren
+  Befehl, als wäre es mit `CLI`/`SEI` gesetzt worden.

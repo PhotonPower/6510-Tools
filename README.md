@@ -11,10 +11,10 @@ lokalen LLM-Agenten, der Programme analysiert und kommentiert.
 
 > **Zielplattform:** Commodore **64** (MOS 6510, PAL) – siehe [docs/c64.md](docs/c64.md).
 
-> **Status: Meilenstein 0.3.** Assembler und Disassembler (0.2) sowie Emulator, C64-Maschine mit KERNAL-Emulation,
-> Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3) sind fertig und geprüft: exhaustiver Roundtrip
-> Dekoder/Assembler, Kreuzprüfung gegen ca65/da65, **alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte ohne Abweichung**
-> und Klaus Dormanns Funktionstest in der CI. Monitor (0.4), Reverse Engineering (0.5) und Disk-Images (0.6) folgen
+> **Status: Meilenstein 0.4.** Assembler und Disassembler (0.2), Emulator, C64-Maschine mit KERNAL-Emulation,
+> Snapshots und die Agenten-Schnittstelle `m6510tool serve` (0.3) sowie der Monitor (0.4) sind fertig und geprüft:
+> exhaustiver Roundtrip Dekoder/Assembler, Kreuzprüfung gegen ca65/da65, **alle 2,44 Millionen Einzelbefehls-Tests von Tom
+> Harte ohne Abweichung** und Klaus Dormanns Funktionstest in der CI. Reverse Engineering (0.5) und Disk-Images (0.6) folgen
 > ([Roadmap](docs/roadmap.md)). Die Dokumente unter `docs/` sagen jeweils oben, was davon schon umgesetzt ist.
 
 ## Umfang
@@ -92,7 +92,12 @@ ctest --test-dir build
 ./build/m6510tool serve < examples/agent_session.jsonl          # Emulator per JSON-Protokoll (C64 mit KERNAL-Emulation)
 ```
 
-Geplant (Meilenstein 0.4): `./build/m6510tool monitor hello.prg` – interaktiver Monitor.
+```sh
+./build/m6510tool monitor --c64 hello.prg                       # interaktiver Monitor (C64 mit KERNAL-Emulation)
+./build/m6510tool monitor < examples/monitor_session.txt        # Monitor-Skript
+```
+
+Im Monitor zum Beispiel `d` (disassemblieren), `run` (starten wie `RUN`), `console` (Ausgabe), `r` (Register), `?` (Hilfe).
 
 Voraussetzungen: CMake ≥ 3.16, C++20-Compiler (GCC ≥ 11, Clang ≥ 14, MSVC 2022).
 

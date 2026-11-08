@@ -1,19 +1,29 @@
 // m6510tool - command line front end for the MOS 6510 / Commodore 64 tools.
 //
-// Implemented: asm, dis, basic list, serve. Planned (see docs/roadmap.md): monitor, d64, t64, crt.
+// Implemented: asm, dis, basic list, monitor, serve. Planned (see docs/roadmap.md): d64, t64, crt.
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "m6510/assembler.hpp"
 #include "m6510/disassembler.hpp"
 #include "m6510/expression.hpp"
 #include "m6510/format.hpp"
 #include "m6510/image_io.hpp"
+#include "m6510/monitor.hpp"
 #include "m6510/petscii.hpp"
 #include "m6510/session.hpp"
 #include "m6510/version.hpp"
@@ -40,11 +50,12 @@ void printUsage(std::ostream& out) {
         << "                [-c comments.txt] [--asm] [--no-bytes] [--style dollar|c|h] [--illegal none|stable|all]\n"
         << "                [--symbols file] [--no-kernal-names] [-o out]\n"
         << "  m6510tool basic list <file.prg>\n"
+        << "  m6510tool monitor [file] [--org addr] [--c64] [--roms dir] [--no-files] [--quiet]\n"
+        << "                                        interactive monitor (docs/monitor.md)\n"
         << "  m6510tool serve [--allow-files]       JSON lines on stdin/stdout (docs/agent-protocol.md)\n"
         << "  m6510tool help | version\n"
         << "\n"
         << "Planned (not implemented yet, see docs/roadmap.md):\n"
-        << "  m6510tool monitor [image]\n"
         << "  m6510tool d64 | t64 | crt ...\n";
 }
 
@@ -230,6 +241,92 @@ int cmdBasic(Args& args) {
     return kExitOk;
 }
 
+bool isInteractive() {
+#ifdef _WIN32
+    return _isatty(_fileno(stdin)) != 0;
+#else
+    return isatty(fileno(stdin)) != 0;
+#endif
+}
+
+// ---- monitor ----------------------------------------------------------------------------------
+// Finds ROM images in a directory by name: basic*, kernal*, char* / chargen* (e.g. the VICE file names).
+std::map<std::string, std::string> findRoms(const std::string& dir) {
+    namespace fs = std::filesystem;
+    if (!fs::is_directory(dir)) throw UsageError("'" + dir + "' is not a directory");
+    std::map<std::string, std::string> found;
+    std::vector<fs::path> files;
+    for (const auto& e : fs::directory_iterator(dir))
+        if (e.is_regular_file()) files.push_back(e.path());
+    std::sort(files.begin(), files.end());
+    for (const fs::path& f : files) {
+        std::string name = f.filename().string();
+        for (char& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        const auto size = fs::file_size(f);
+        if (name.rfind("basic", 0) == 0 && size == 0x2000) found.emplace("basic", f.string());
+        else if (name.rfind("kernal", 0) == 0 && size == 0x2000) found.emplace("kernal", f.string());
+        else if (name.rfind("char", 0) == 0 && size == 0x1000) found.emplace("char", f.string());
+    }
+    return found;
+}
+
+int cmdMonitor(Args& args) {
+    MonitorOptions opt;
+    std::string file, org, roms;
+    bool c64 = false, quiet = false;
+    while (!args.done()) {
+        const std::string a = args.next();
+        if (a == "--c64") c64 = true;
+        else if (a == "--roms") roms = args.value(a), c64 = true;
+        else if (a == "--org") org = args.value(a);
+        else if (a == "--no-files") opt.allowFiles = false;
+        else if (a == "--quiet" || a == "-q") quiet = true;
+        else if (!a.empty() && a[0] == '-') throw UsageError("unknown option '" + a + "'");
+        else if (file.empty()) file = a;
+        else throw UsageError("more than one file given");
+    }
+    Monitor mon(opt);
+    auto setup = [&](const std::string& line) {
+        const std::string out = mon.execute(line);
+        if (out.rfind("? ", 0) == 0) throw UsageError(out.substr(2, out.size() - 3));
+        return out;
+    };
+    std::string startup;
+    if (c64) {
+        std::map<std::string, std::string> found;
+        if (!roms.empty()) {
+            found = findRoms(roms);
+            if (found.empty()) throw UsageError("no ROM images (basic*, kernal*, char*) in '" + roms + "'");
+        }
+        setup(found.count("kernal") ? "machine c64 rom" : "machine c64");
+        // The ROM files bypass the monitor's file switch: they are part of the command line, not a monitor command.
+        for (const auto& [which, path] : found) {
+            mon.machine().loadRom(which, readBinaryFile(path));
+            startup += which + " ROM: " + path + "\n";
+        }
+    }
+    if (!file.empty()) {
+        const std::optional<Address> at = org.empty() ? std::nullopt : std::optional<Address>(parseAddress(org, "--org"));
+        const LoadedFile f = mon.machine().loadFile(file, "auto", at);
+        startup += "loaded " + file + ": " + hexDigits(f.program.address, 4) + "-" +
+                   hexDigits(static_cast<unsigned>(f.program.bytes.empty() ? f.program.address : f.program.end() - 1), 4) +
+                   ", PC=" + hexDigits(f.entry, 4) + (f.basic.empty() ? "" : "  (BASIC: " + f.basic + ")") + "\n";
+        (void)setup("d " + hexDigits(f.entry, 4) + " 1");  // continue the disassembly at the entry
+    }
+    const bool interactive = !quiet && isInteractive();
+    if (interactive) std::cout << Monitor::banner();
+    std::cout << startup;
+    if (interactive) std::cout << mon.execute("r");
+    std::string line;
+    while (!mon.finished()) {
+        if (interactive) std::cout << mon.prompt() << " " << std::flush;
+        if (!std::getline(std::cin, line)) break;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::cout << mon.execute(line) << std::flush;
+    }
+    return kExitOk;
+}
+
 // ---- serve ------------------------------------------------------------------------------------
 int cmdServe(Args& args) {
     SessionOptions opt;
@@ -249,7 +346,7 @@ int cmdServe(Args& args) {
 }
 
 bool isPlanned(const std::string& command) {
-    for (const char* c : {"monitor", "d64", "t64", "crt"}) {
+    for (const char* c : {"d64", "t64", "crt"}) {
         if (command == c) return true;
     }
     return false;
@@ -277,6 +374,7 @@ int main(int argc, char** argv) {
         if (command == "asm") return cmdAsm(args);
         if (command == "dis") return cmdDis(args);
         if (command == "basic") return cmdBasic(args);
+        if (command == "monitor") return cmdMonitor(args);
         if (command == "serve") return cmdServe(args);
         if (isPlanned(command)) {
             std::cerr << "m6510tool: '" << command << "' is not implemented yet (see docs/roadmap.md)\n";

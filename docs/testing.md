@@ -9,7 +9,7 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 
 ## Suites
 
-**Vorhanden (0.2):**
+**Vorhanden (0.2–0.4):**
 
 | Suite | Inhalt |
 |---|---|
@@ -28,13 +28,14 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 | `c64` | C64-Maschine (rund 100 Prüfungen): alle acht `$01`-Konfigurationen (Prozessorsicht und `peek`), Schreiben unter ROM, ROM-Größen, Schreibprotokoll (Spiegel, Namen, PC, doppeltes Schreiben von `INC`), Raster-Warteschleife, Raster-IRQ über einen eigenen Vektor, CIA-1-Timer-A-IRQ; KERNAL-Emulation: Programm mit `CHROUT`/`GETIN`/`PLOT`/`SCREEN` (Konsole, Bildschirmspeicher, Farbe, Aufrufprotokoll mit Aufrufstelle), nicht emulierter Aufruf, umgebogener `CHROUT`-Vektor, Jiffy-Uhr über den eigenen IRQ-Handler (60 Hz, nicht protokolliert), `LOAD` über die Dateiquelle, Datei nicht gefunden, `BRK`, unbekannter Einsprung, ausgeblendeter KERNAL, Zustände |
 | `session` | Agenten-Protokoll (rund 5000 Prüfungen): Befehle der generischen Maschine (asm/dis/read/write/set/step/run/break/symbols), über 20 fehlerhafte Anfragen ohne Wirkung, `asm` mit gesammelten Fehlern, `call` (echte Rückkehr, Stapel daneben, Speicher vorgeben), **Checkpoint → Lauf → Rollback → Lauf liefert identische Antworten**, `diff`, Watchpoints, Trace, `step_over`, `run_until_return`; C64: `run_program`, `console`, `io`, `kernalcalls`, `screen`, Rollback stellt Bausteine und Farb-RAM wieder her, `keys`, CPU- und RAM-Sicht, IRQ von außen über die KERNAL-Vektoren; Dateien nur mit `--allow-files` (PRG mit BASIC-Starter, Snapshot speichern/laden, `attach` + `LOAD`, Maschine passt nicht), **jede Abkürzung einer Snapshot-Datei wird abgelehnt**; 3000 zufällige Befehle mit zufälligen Argumenten |
 | `cli_serve` | `examples/agent_session.jsonl` durch `m6510tool serve`: jede Antwort `ok:true`, die Ausgabe des Programms ist da |
+| `monitor` | Monitor (rund 8000 Prüfungen): Zahlenschreibweisen (hex, `100.`, Präfixe, Symbole vor Hexzahlen, `@`-Register), Speicherbefehle (Ausgabeformat, Fortsetzung, `f` einschließlich `bis`, `c`, überlappendes `t`, `h` mit Text), Assemble-Modus (Labels, Zuweisungen, Direktiven, undokumentierte Befehle, Fehler ändern nichts, keine Vorwärtsreferenzen), Disassembler mit Marken und PC-Markierung, Register (von links nach rechts, alles oder nichts), `n`/`o`/`u`/`g`/`ru`, Haltepunkte und Watchpoints, `JAM`, Limit, Checkpoints, `reset`, IRQ/NMI (auch die Verzögerung nach `CLI`), Dateibefehle (`asm`, `l`, `sv` PRG/Raw, `symsave`/`symload`, Snapshots, Maschine passt nicht, falsche ROM-Größe), `--no-files`; C64: `machine`, `bank`, KERNAL-Namen, `run`, `console`, `kernal`, `io`, `screen`, Schreiben unter ROM, `keys` + `GETIN`, BASIC-Starter, ohne KERNAL-Emulation; **4000 zufällige Befehlszeilen ohne Absturz**; das Beispielskript |
+| `cli_monitor` | `examples/monitor_session.txt` durch `m6510tool monitor`: kein Fehler, die wichtigen Ausgabezeilen sind da |
 | `cpu` | Emulator (rund 350 Prüfungen): Arithmetik und Flags (auch Dezimalmodus), Seitenfehler (`zp,X`, `(zp),Y` bei `$FF`, `JMP ($xxFF)`), Zyklen (Seitenzuschlag, Verzweigungen), Stapel, `JSR`/`RTS`, `BRK`/`RTI`, IRQ mit Verzögerung nach `CLI`, NMI, `JAM`, Breakpoints/Watchpoints/`runUntil`/`stepOver`/`runUntilReturn`/`call` (falsches „returned“), Hooks (Ausführungs-, Lese-, Schreib-Hook mit dem doppelten Schreiben von `INC`), Prozessorport, Zustand; Abgleich mit dem Dekoder für alle Opcodes |
 
 **Geplant** (Vorbild: die Suites der Schwesterprojekte, jeweils mit dem Meilenstein):
 
 | Suite | Inhalt | MS |
 |---|---|---|
-| `monitor` | Zahlenschreibweisen, alle Befehle, C64-Befehle, Dateibefehle, `--no-files`, **zufällige Befehlszeilen ohne Absturz** | 0.4 |
 | `video` | Rendern aller Modi aus selbst gebauten Speicherzuständen (Pixel an bekannten Stellen), Rahmen, Bank-Umschaltung, Text-Auslesen, PNG-Ausgabe (Kopf, Prüfsummen) | 0.5 |
 | `reverse` | Annotationen, Codefluss-Analyse, verifiziertes Listing; **zufällige Programme mit zufälligen Annotationen: das Listing ist jedes Mal verifiziert** | 0.5 |
 | `jumptable` | `vector`, `rts`, `lohi`, `pointers` mit Zielen; Gegenbeispiele; Zufallsprogramme | 0.5 |
