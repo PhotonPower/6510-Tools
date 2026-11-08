@@ -387,6 +387,8 @@ table:  .FILL 20
         CHECK(!ann.setVariable(grid));
         lo.to = 0xC00F;
         CHECK(has(renderListing(mem, an, ann, lo).text, "JSR SETLFS"));
+        lo.to = 0x10000;
+        CHECK(!has(renderListing(mem, an, ann, lo).text, "data_FFBA"));
         // ... and inside a large plain region it gets a line and a label of its own
         lo.to = 0x10000;
         const ListingResult f = renderListing(mem, an, ann, lo);
@@ -410,6 +412,22 @@ table:  .FILL 20
         CHECK(g.verified);
         CHECK(has(g.text, "LDA speech_table+$10"));
         CHECK(!has(g.text, "data_C110"));
+        VariableDoc vec;                           // inside a named variable of two bytes
+        vec.address = 0xC10E;
+        vec.name = "jump_vec";
+        vec.size = 2;
+        (void)ann.removeLabel(0xC100);
+        CHECK(!ann.setVariable(vec));
+        Memory m3 = mem;
+        const AssemblyResult a3 = assemble(" * = $C000\n STA $C10F\n RTS\n", o);
+        for (const Segment& seg : a3.segments) m3.load(seg.address, seg.bytes);
+        Analysis an3(m3, 0xC000, 0x10000);
+        an3.setDataBarrier([&ann](Address x) { return ann.dataCovering(x) != nullptr; });
+        an3.addEntry(0xC000);
+        an3.analyzeFlow();
+        const ListingResult h = renderListing(m3, an3, ann, lo);
+        CHECK(h.verified);
+        CHECK(has(h.text, "STA jump_vec+1"));
     }
 
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------
