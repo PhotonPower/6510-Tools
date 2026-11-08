@@ -113,7 +113,7 @@ Bestätigt am 2026-11-08 (Punkte 2, 5, 6 und 8 ausdrücklich, ebenso die offene 
    `SCROLY`, …) oder sprechende Namen (`VIC_BORDER`, …)? Vorschlag: „Mapping“-Namen, weil sie in vielen Quellen stehen;
    der Kommentar nennt die Bedeutung.
 3. **Palette** für Screenshots: Pepto oder Colodore? Vorschlag: Colodore (neuere Messung), per Option umschaltbar.
-4. **Verhalten der instabilen Opcodes:** welche „magische Konstante“ für `ANE`/`LXA` (häufig `$EE` bzw. `$EE`/`$FF`)?
-   Vorschlag: so, wie es der gewählte Einzelbefehls-Testsatz erwartet, und in [emulator.md](emulator.md) dokumentiert.
-5. **Schreibzugriffe auf `$00/$01`:** Was landet im RAM unter dem Prozessorport (auf echter Hardware ein Wert vom Bus)?
-   Vorschlag: der geschriebene Wert landet auch im RAM; als bekannte Vereinfachung dokumentiert.
+4. **Verhalten der instabilen Opcodes** – *entschieden:* `$EE` für `ANE` und `LXA`, wie in Tom Hartes Testsatz (aus den
+   Testdaten ermittelt); die übrigen instabilen Opcodes ebenfalls nach dem Testsatz ([emulator.md](emulator.md)).
+5. **Schreibzugriffe auf `$00/$01`** – *umgesetzt wie vorgeschlagen:* der geschriebene Wert landet auch im RAM
+   (dokumentierte Vereinfachung).

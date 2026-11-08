@@ -25,12 +25,12 @@ eigenes Programm (`tests/test_<name>.cpp`), eingetragen in `tests/CMakeLists.txt
 | `image_io` | PRG (Ladeadresse, genau bis `$FFFF`, zu lang, zu kurz), P00 (Name, Signatur), Dateizugriff, Endungen |
 | `cli_version` | `m6510tool version` |
 | `cli_roundtrip` | Beispielprogramm assemblieren → disassemblieren (Ausgabe geprüft) → `--asm` mit Symboldatei → erneut assemblieren → Dateien identisch; `basic list` |
+| `cpu` | Emulator (rund 350 Prüfungen): Arithmetik und Flags (auch Dezimalmodus), Seitenfehler (`zp,X`, `(zp),Y` bei `$FF`, `JMP ($xxFF)`), Zyklen (Seitenzuschlag, Verzweigungen), Stapel, `JSR`/`RTS`, `BRK`/`RTI`, IRQ mit Verzögerung nach `CLI`, NMI, `JAM`, Breakpoints/Watchpoints/`runUntil`/`stepOver`/`runUntilReturn`/`call` (falsches „returned“), Hooks (Ausführungs-, Lese-, Schreib-Hook mit dem doppelten Schreiben von `INC`), Prozessorport, Zustand; Abgleich mit dem Dekoder für alle Opcodes |
 
 **Geplant** (Vorbild: die Suites der Schwesterprojekte, jeweils mit dem Meilenstein):
 
 | Suite | Inhalt | MS |
 |---|---|---|
-| `cpu` | Emulator: Arithmetik und Flags (auch Dezimalmodus), alle Adressierungsarten mit Seitenfehlern, Zyklen, Stapel, `BRK`/`RTI`, IRQ/NMI mit Verzögerung nach `CLI`/`SEI`/`PLP`, `JAM`, Prozessorport, Breakpoints/Watchpoints/`runUntil`/`stepOver`/`call`, Hooks; Abgleich mit dem Dekoder für alle 256 Opcodes | 0.3 |
 | `session` | alle Befehle des Agenten-Protokolls; Fehler ohne Absturz; **Checkpoint → Lauf → Rollback → Lauf liefert identische Antworten**; Dateizugriff nur mit `--allow-files`; Snapshot-Serialisierung (jede Abkürzung wird abgelehnt) und Speicher-Diff | 0.3 |
 | `c64` | Speicherkarte: alle acht `$01`-Konfigurationen, Schreiben unter ROM, Spiegelungen, Farb-RAM, Schreibprotokoll mit Namen, Rasterzähler, VIC-Sicht | 0.3 |
 | `kernal` | KERNAL-Emulation: `CHROUT` (Konsole und Bildschirm, Steuerzeichen, Scrollen), `GETIN` mit Tastenpuffer, `PLOT`, `LOAD` aus einem selbst gebauten D64, nicht emulierte Aufrufe werden protokolliert, Rückkehr ins BASIC = `exit`, Checkpoints | 0.3 |
@@ -67,13 +67,19 @@ Bewusste Unterschiede zählen die Skripte getrennt: Namen werden umgesetzt (cc65
 nicht kennt, erscheinen als „not supported“ bzw. „.byte in da65“ und lassen die Prüfung nur dann scheitern, wenn es
 dokumentierte Opcodes sind. Die CI schreibt die Zusammenfassung beider Prüfungen als Hinweis in die Zusammenfassung des Laufs.
 
-## Emulator gegen Testsätze und Referenz (geplant)
+## Emulator gegen Testsätze und Referenz
 
-| Prüfung | Quelle | Umfang | Werkzeug |
-|---|---|---|---|
-| Einzelbefehle | Tom Harte, SingleStepTests „6502“ (JSON) | 256 Opcodes × 10 000 Fälle: Register, Speicher, Zyklen und Buszugriffe | `tools/harte_runner.cpp` |
-| Funktionstest | Klaus Dormann, `6502_functional_test` | ganzes Programm, Erfolg = Endlosschleife an bekannter Adresse | `tools/dormann_runner.cpp` |
-| Dezimalmodus | Klaus Dormann, `6502_decimal_test` | alle Operanden-/Flag-Kombinationen für `ADC`/`SBC` | ebenso |
+```sh
+cmake -S . -B build -DM6510_BUILD_TOOLS=ON && cmake --build build
+./build/m6510_harte 65x02/6502/v1/*.json                         # Testsatz vorher holen (rund 1 GB)
+./build/m6510_dormann 6502_functional_test.bin 0 0x400 0x3469
+```
+
+| Prüfung | Quelle | Umfang | Werkzeug | Stand |
+|---|---|---|---|---|
+| Einzelbefehle | Tom Harte, SingleStepTests/65x02 „6502“ (JSON, MIT) | 244 Opcodes × 10 000 Fälle (ohne `JAM`): Register, Speicher, Zyklenzahl | `tools/harte_runner.cpp` | CI-Job `singlestep`: 2 440 000 Fälle, 0 Abweichungen |
+| Funktionstest | Klaus Dormann, `6502_functional_test.bin` (GPL-3.0) | ganzes Programm, Erfolg = Endlosschleife bei `$3469` | `tools/dormann_runner.cpp` | CI-Job `functional`: bestanden |
+| Dezimalmodus | Klaus Dormann, `6502_decimal_test` | liegt nur als Quelltext vor; durch die Einzelbefehls-Tests abgedeckt | – | entfällt |
 | C64-Verhalten | Wolfgang Lorenz, Testsuite 2.15 | C64-Programme je Befehl/Thema, auf der C64-Maschine mit KERNAL-Emulation | `tests/agent/test_lorenz.py` o. Ä. |
 | Differenztest | perfect6502 (Kandidat) | zufällige Zustände und Programme, Vergleich nach jedem Befehl | `tools/diff_reference.cpp`, `tools/run_diff_reference.sh` |
 

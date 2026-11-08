@@ -59,3 +59,47 @@ jobs:
       - name: Decoder vs da65
         shell: bash
         run: python3 tools/crosscheck_da65.py build/m6510_dump_forms > da65.log 2>&1 || { cat da65.log; python3 tools/ci_annotate.py "da65 cross-check failed" da65.log; }; cat da65.log; echo "::notice title=da65 cross-check::$(head -2 da65.log | tr '\n' ' ')"
+
+  singlestep:
+    name: Tom Harte single-step tests (6502, 2.4 million cases)
+    runs-on: ubuntu-latest
+    env:
+      HARTE_COMMIT: 2f6980a2d95757486c7bee24355c360e40e2a224   # SingleStepTests/65x02, MIT; fetched, not stored here
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM6510_BUILD_TOOLS=ON -DM6510_BUILD_TESTS=OFF && cmake --build build
+      - name: Cache test set
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: harte
+          key: harte-6502-v1-${{ env.HARTE_COMMIT }}
+      - name: Fetch test set (about 1 GB)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p harte
+          for i in $(seq 0 255); do printf '%02x\n' $i; done | xargs -P 16 -I{} curl -sSfL --retry 3 -o harte/{}.json \
+            https://raw.githubusercontent.com/SingleStepTests/65x02/$HARTE_COMMIT/6502/v1/{}.json
+      - name: Run
+        shell: bash
+        run: |
+          ./build/m6510_harte harte/*.json > harte.log 2>&1 || { grep -v ": 10000 tests, 0 failed" harte.log; python3 tools/ci_annotate.py "single-step tests failed" harte.log; }
+          tail -n 1 harte.log; echo "::notice title=single-step tests::$(tail -n 1 harte.log)"
+
+  functional:
+    name: Klaus Dormann functional test
+    runs-on: ubuntu-latest
+    env:
+      DORMANN_COMMIT: 7954e2dbb49c469ea286070bf46cdd71aeb29e4b   # Klaus2m5/6502_65C02_functional_tests, GPL-3.0; fetched, not stored here
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM6510_BUILD_TOOLS=ON -DM6510_BUILD_TESTS=OFF && cmake --build build
+      - name: Fetch test image
+        run: curl -sSfLO https://raw.githubusercontent.com/Klaus2m5/6502_65C02_functional_tests/$DORMANN_COMMIT/bin_files/6502_functional_test.bin
+      - name: Run (success trap at $3469)
+        shell: bash
+        run: |
+          ./build/m6510_dormann 6502_functional_test.bin 0 0x400 0x3469 > dormann.log 2>&1 || { cat dormann.log; python3 tools/ci_annotate.py "functional test failed" dormann.log; }
+          cat dormann.log; echo "::notice title=functional test::$(cat dormann.log)"

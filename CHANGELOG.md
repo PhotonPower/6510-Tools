@@ -7,6 +7,16 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Meilenstein 0.3, erster Teil – Prozessorkern** (`m6510::Cpu`): alle 256 Opcodes (undokumentierte und instabile nach
+  Tom Hartes Testsatz, `JAM` hält an), NMOS-Dezimalmodus, Zyklen pro Befehl, IRQ/NMI/`BRK`/RESET mit der Verzögerung nach
+  `CLI`/`SEI`/`PLP`, Prozessorport `$00/$01` (abschaltbar), doppeltes Schreiben der Read-Modify-Write-Befehle;
+  Einzelschritt, Breakpoints, Watchpoints, `runUntil`/`runUntilReturn`/`stepOver`/`call`, Lese-/Schreib-/Ausführungs-Hooks,
+  Zustand. JSON-Baustein aus dem MC68000-Projekt übernommen.
+  - **Tom Hartes Einzelbefehls-Tests:** 2 440 000 Fälle, 0 Abweichungen (Register, Speicher, Zyklenzahl;
+    `tools/harte_runner.cpp`, CI-Job `singlestep`). Gefunden und behoben: `JSR` holt sein Ziel-High-Byte nach dem Stapeln.
+  - **Klaus Dormanns Funktionstest** bestanden (`tools/dormann_runner.cpp`, CI-Job `functional`).
+  - Unit-Tests `cpu` (rund 350 Prüfungen).
+  - Offene Frage 4 entschieden: `ANE`/`LXA` mit der Konstante `$EE` (aus den Testdaten ermittelt).
 - **Meilenstein 0.2 – Assembler und Disassembler:**
   - **Opcode-Tabelle** (`m6510/opcodes.hpp`): alle 256 Opcodes mit Mnemonic (undokumentierte nach „No More Secrets“),
     Adressierungsart, Zyklen, Seitenzuschlag, Klasse (dokumentiert / stabil / instabil / JAM) und berechneter Vorzugsform;

@@ -55,9 +55,9 @@ Agenten-Schnittstelle sind weitere Frontends derselben Bibliothek.
 | `petscii.hpp`               | PETSCII ↔ ASCII, Bildschirmcodes, BASIC-Token (Detokenisierer, BASIC-Starter)          | fertig   |
 | `image_io.hpp`              | Dateien lesen/schreiben: Raw, PRG, P00                                                  | fertig   |
 | `d64.hpp`, `t64.hpp`, `crt.hpp` | Disk-, Tape- und Cartridge-Images                                                   | geplant  |
-| `cpu.hpp`                   | `Registers`, `Cpu` (Ausführung, Zyklen, IRQ/NMI, Breakpoints, Hooks, Prozessorport)     | geplant  |
+| `cpu.hpp`                   | `Registers`, `Cpu` (Ausführung, Zyklen, IRQ/NMI, Breakpoints, Hooks, Prozessorport)     | fertig   |
 | `snapshot.hpp`              | `Snapshot` (CPU + Speicher + Maschinenzustand), Datei, Speicher-Diff                    | geplant  |
-| `json.hpp`                  | kleiner JSON-Baustein (Parser/Ausgabe, Einfügereihenfolge)                              | geplant  |
+| `json.hpp`                  | kleiner JSON-Baustein (Parser/Ausgabe, Einfügereihenfolge; aus dem MC68000-Projekt)     | fertig   |
 | `c64.hpp`                   | `C64`: Speicherkarte, Banking über `$01`, ROMs, Farb-RAM, I/O-Register mit Schreibprotokoll, Rasterzähler | geplant |
 | `kernal.hpp`                | `Kernal`: abgefangene Sprungtabelle, nachgebildete Routinen, Aufrufprotokoll            | geplant  |
 | `video.hpp`, `png.hpp`      | VIC-II-Bild aus dem Speicherzustand, PNG-Ausgabe (ohne externe Bibliothek)              | geplant  |
