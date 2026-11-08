@@ -1,6 +1,6 @@
 #pragma once
 
-#include <array>
+#include <algorithm>
 #include <span>
 #include <vector>
 
@@ -18,7 +18,7 @@ namespace m6510 {
 ///   shared building block for those quirks.
 class Memory {
 public:
-    Memory() { ram_.fill(0); }
+    Memory() : ram_(kAddressSpace, 0) {}
 
     [[nodiscard]] Byte read8(Address address) const { return ram_[address]; }
     void write8(Address address, Byte value) { ram_[address] = value; }
@@ -53,13 +53,13 @@ public:
         return out;
     }
 
-    void clear() { ram_.fill(0); }
+    void clear() { std::fill(ram_.begin(), ram_.end(), Byte{0}); }
 
-    /// Direct access to the whole RAM (snapshots, diffs, video rendering).
-    [[nodiscard]] const std::array<Byte, kAddressSpace>& raw() const { return ram_; }
+    /// Direct access to the whole RAM (snapshots, diffs, video rendering); always 64 KiB.
+    [[nodiscard]] const std::vector<Byte>& raw() const { return ram_; }
 
 private:
-    std::array<Byte, kAddressSpace> ram_{};
+    std::vector<Byte> ram_;  // on the heap: a Memory may live on the stack (Windows has 1 MiB stacks)
 };
 
 }  // namespace m6510
