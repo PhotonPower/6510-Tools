@@ -178,8 +178,13 @@ gilt). `report` zeigt, was offen ist.
 
 ## 7. Woran man ein Problem erkennt
 
-Wird mit den Erfahrungen aus der Erprobung mit einem echten Modell gefüllt. Bekannt aus den Schwesterprojekten und schon
-abgefangen:
+**Blindtest (2026-11-08):** Ein Claude-Agent hat mit `m6510_drive.py` die Rolle des Modells übernommen – nur mit dem PRG,
+ohne Quelltext. Er hat alle 10 Routinen richtig erkannt und dokumentiert (beide Sprungtabellen, den Raster-Handler, den
+selbstmodifizierenden Vergleich, das Sprite), das Listing war verifiziert; gebraucht hat er rund 115 Werkzeugaufrufe, 6 bis
+13 je Routine. Seine Befunde zu den Werkzeugen sind behoben (CHANGELOG): uneinheitliche Namen in Ausschnitten, verlorene
+Kommentare an Daten, ein Zähler in einem `.FILL`, fehlende Hinweise auf Sprungtabellen, Sprites und KERNAL-Adressen.
+
+Die Erprobung mit einem echten lokalen Modell steht noch aus. Bekannt aus den Schwesterprojekten und schon abgefangen:
 
 - **Falsches `returned`:** `run_routine` meldet `returned: True` nur, wenn der Stapelzeiger wieder stimmt. Ein Interrupt-
   Handler, als Unterprogramm aufgerufen, kehrt nicht zurück – deshalb läuft er automatisch mit Interrupt-Rahmen.

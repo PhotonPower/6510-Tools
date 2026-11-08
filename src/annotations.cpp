@@ -5,6 +5,7 @@
 
 #include "m6510/assembler.hpp"
 #include "m6510/c64.hpp"
+#include "m6510/disassembler.hpp"
 #include "m6510/format.hpp"
 #include "m6510/kernal.hpp"
 
@@ -24,6 +25,7 @@ const std::set<std::string>& systemNames() {
     static const std::set<std::string> names = [] {
         std::set<std::string> n;
         for (const auto& [a, name] : Kernal::jumpTable()) n.insert(upper(name));
+        for (const auto& [a, name] : kernalSymbols()) n.insert(upper(name));
         for (unsigned a = 0xD000; a < 0xE000; ++a) {
             const std::string r = C64::registerName(static_cast<Address>(a));
             if (!r.empty()) n.insert(upper(r));

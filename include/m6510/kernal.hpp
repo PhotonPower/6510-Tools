@@ -63,6 +63,9 @@ public:
 
     /// Name of a KERNAL entry address (jump table or internal routine), "" if unknown.
     [[nodiscard]] static std::string entryName(Address address);
+    /// What a well-known system address is, for a reader who meets it in a program: KERNAL RAM vectors, the KERNAL's
+    /// IRQ code, the sprite pointers (with the screen at $0400). Empty if it is none of them.
+    [[nodiscard]] static std::string describeAddress(Address address);
     /// All jump-table names (for symbols).
     [[nodiscard]] static const std::map<Address, std::string>& jumpTable();
 

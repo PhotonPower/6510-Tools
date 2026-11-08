@@ -173,7 +173,7 @@ ADDR = {"type": "string", "description": 'Address as a hexadecimal string such a
 DATA_KINDS = ["bytes", "words", "text", "screen", "pointers", "rts_pointers", "lohi", "sprites", "charset"]
 
 TOOLS = [
-    _fn("get_listing", "Annotated listing of an address range, as currently named and commented.",
+    _fn("get_listing", "Annotated listing of an address range, as currently named and commented. `to` is INCLUSIVE (the last address to show).",
         {"from": ADDR, "to": ADDR}, ["from", "to"]),
     _fn("disassemble", "Disassemble `count` instructions starting at an address.",
         {"addr": ADDR, "count": {"type": "integer"}}, ["addr"]),
@@ -464,8 +464,19 @@ class Tools:
             return f"error: {e}"
 
     # ---- reading ----
+    def resolve(self, addr):
+        """An address argument (number, hex string, label name) as a number."""
+        return to_int(self.s.ok(cmd="read", addr=norm_addr(addr), len=1)["addr"])
+
     def t_get_listing(self, **a):
-        r = self.s.ok(cmd="listing", verify=False, equates=False, addresses=True, max_chars=24000, **{"from": norm_addr(a["from"]), "to": norm_addr(a["to"])})
+        first, last = self.resolve(a["from"]), self.resolve(a["to"])
+        if last < first:
+            raise ValueError("`to` is below `from`")
+        lo, hi = self.program or (0, 0x10000)
+        first, end = max(first, lo), min(last + 1, hi)   # `to` is inclusive; the listing command wants the end
+        if end <= first:
+            raise ValueError(f"the range lies outside the analysed program (0x{lo:04X}-0x{hi - 1:04X})")
+        r = self.s.ok(cmd="listing", verify=False, equates=False, addresses=True, max_chars=24000, **{"from": f"0x{first:04X}", "to": f"0x{end:X}"})
         return r["listing"] + ("\n[listing truncated]" if r.get("truncated") else "")
 
     def t_disassemble(self, addr, count=16):
@@ -517,7 +528,9 @@ class Tools:
         regs = {k.upper(): (norm_addr(v) if isinstance(v, str) else v) for k, v in (registers or {}).items()}
         s.ok(cmd="checkpoint", name="pre_run")  # what the routine changes is measured from here: the memory the caller set up does not count
         screen_before = None
+        sprites_before = None
         if self.c64:
+            sprites_before = self.sprite_state()
             s.ok(cmd="io")           # empty the chip-write log
             s.ok(cmd="kernalcalls")  # ... the KERNAL-call log
             s.ok(cmd="console")      # ... and the console
@@ -576,6 +589,9 @@ class Tools:
                         out.append(f'  {w["addr"]} <- {w["value"]} ({w["chip"]}{" " + w["what"] if "what" in w else ""}) by the instruction at {w["pc"]} [{label}]')
                     if len(group) > cap:
                         out.append(f"  ... and {len(group) - cap} more from {label}")
+                if any(a["pc"] == b["pc"] and a["addr"] == b["addr"] for a, b in zip(writes, writes[1:])):
+                    out.append("NOTE: two writes to the same register by one instruction: read-modify-write instructions (INC, DEC, ASL, ...) on the 6510 "
+                               "write twice, first the old value, then the new one. Only the second one is the result.")
             calls = s.ok(cmd="kernalcalls").get("calls", [])
             if calls:
                 out.append(f"KERNAL calls made: {len(calls)}")
@@ -592,6 +608,7 @@ class Tools:
             text = s.ok(cmd="console").get("text", "")
             if text:
                 out.append(f"text printed with CHROUT: {text!r}")
+            out += self.sprite_report(sprites_before, self.sprite_state())
             after = s.ok(cmd="screen")["lines"]
             changed = [(i, line) for i, (old, line) in enumerate(zip(screen_before, after)) if old != line]
             d = s.ok(cmd="screen_diff", a="_before")
@@ -623,6 +640,40 @@ class Tools:
         else:
             out.append("state kept; call reset_machine to restore.")
         return "\n".join(out)
+
+    def sprite_state(self):
+        """The sprite registers and pointers as the VIC sees them now (None if the I/O area is not visible)."""
+        regs = bytes.fromhex(self.s.ok(cmd="read", addr="0xD000", len=0x2F)["hex"].replace(" ", ""))
+        screen = to_int(self.s.ok(cmd="screen")["screen"])
+        pointers = bytes.fromhex(self.s.ok(cmd="read", addr=f"0x{screen + 0x3F8:04X}", len=8)["hex"].replace(" ", ""))
+        bank = to_int(self.s.ok(cmd="screen")["bank"])
+        return regs, pointers, bank
+
+    @staticmethod
+    def sprite_report(before, after):
+        """Sprites are not part of the text screen: say which are on, where, and which data they show."""
+        if after is None:
+            return []
+        regs, pointers, bank = after
+        lines = []
+        for n in range(8):
+            if not regs[0x15] >> n & 1:
+                continue
+            x = regs[2 * n] | ((regs[0x10] >> n & 1) << 8)
+            y = regs[2 * n + 1]
+            extra = [f"colour {regs[0x27 + n] & 15}"]
+            if regs[0x1C] >> n & 1:
+                extra.append("multicolour")
+            if regs[0x17] >> n & 1 or regs[0x1D] >> n & 1:
+                extra.append("expanded")
+            new = before is not None and not (before[0][0x15] >> n & 1)
+            lines.append(f"  sprite {n}{' (switched on by this run)' if new else ''}: x={x} y={y}, data at 0x{bank + pointers[n] * 64:04X} "
+                         f"(pointer {pointers[n]}), " + ", ".join(extra))
+        if lines:
+            return ["sprites on (they are not part of the text screen):"] + lines
+        if before is not None and before[0][0x15]:
+            return ["sprites: all switched off by this run"]
+        return []
 
     def interrupt_vectors(self):
         """{handler address: vector} of the interrupt handlers the analysis found."""
@@ -718,8 +769,8 @@ class Tools:
         return "ok"
 
     def t_mark_constant(self, addr, remove=False):
-        self.s.ok(cmd="ann_constant", addr=norm_addr(addr), remove=bool(remove))
-        return "ok: constant mark removed" if remove else "ok: constant marked"
+        r = self.s.ok(cmd="ann_constant", addr=norm_addr(addr), remove=bool(remove))
+        return ("ok: constant mark removed" if remove else "ok: constant marked") + (f' (note: {r["note"]})' if r.get("note") else "")
 
     def completeness_problems(self, rng=None):
         """What is still missing in a routine's listing (names, comments); `rng` is one (first, end) or a list of them,
@@ -743,6 +794,14 @@ class Tools:
         unnamed = re.findall(r"^((?:loc|sub|data)_[0-9A-Fa-f]{4}):", text, re.M)
         if unnamed:
             problems.append(f"labels without a real name: {', '.join(unnamed[:8])}{' ...' if len(unnamed) > 8 else ''} (name_label)")
+        used = []
+        for line in text.splitlines():
+            m = re.match(r"\s+[A-Z]{3}(?:\.W)?\s+([^;]*)", line)
+            if m:
+                used += [x for x in re.findall(r"\b(data_[0-9A-Fa-f]{4})\b", m.group(1)) if x not in used and x not in unnamed]
+        if used:
+            problems.append(f"data used without a name: {', '.join(used[:8])}{' ...' if len(used) > 8 else ''} "
+                            "(name_variable for a variable, mark_data with a name for a table or text)")
         numeric = set()
         for line in text.splitlines():
             m = re.match(r"\s+([A-Z]{3}(?:\.W)?)\s+([^;]*)", line)
@@ -987,11 +1046,24 @@ class Annotator:
                     refs.append(x)
         callees = [f'  {c["name"]} ({c["addr"]}{"" if c["documented"] else ", not documented yet"})' for c in r["callees"]]
         kernal = {k["addr"]: k["name"] for k in r.get("kernal_calls", [])}
-        callees += [f"  {kernal[x]} ({x}, KERNAL)" if x in kernal else f"  {x} (outside the analysed code)" for x in r["external_calls"]]
+        rom = {x["addr"]: x.get("preview", "") for x in refs if x["kind"] in ("rom", "kernal", "system")}
+        callees += [f"  {kernal[x]} ({x}, KERNAL)" if x in kernal else f"  {x} ({rom[x]})" if rom.get(x) else f"  {x} (outside the analysed code)"
+                    for x in r["external_calls"]]
+        tables = self.s.ok(cmd="jump_tables", max_entries=64)["tables"]
+        own = [t for t in tables if t.get("jump") and any(to_int(bs) <= to_int(t["jump"]) < to_int(be) for bs, be in blocks)]
+        for t in own:
+            how = {"rts": "the RTS trick (entries are target - 1)", "lohi": "JMP (vector) loaded from two tables", "vector": "JMP (vector)",
+                   "pointers": "a table of addresses"}[t["kind"]]
+            callees.append(f'  jump table at {t["table"]}' + (f' / {t["hi_table"]}' if t.get("hi_table") else "") + f' ({how}), used at {t["jump"]}: ' +
+                           ", ".join(f'entry {i} -> {e["name"]}' for i, e in enumerate(t["entries"])))
+        cases = [(t, i) for t in tables for i, e in enumerate(t["entries"]) if to_int(e["target"]) == to_int(addr)]
         if r.get("callers"):
             callers = ", ".join(r["callers"])
         elif r.get("interrupt_vector"):
             callers = f'nobody: it is an interrupt handler installed through the vector at {r["interrupt_vector"]}'
+        elif cases:
+            callers = "reached through " + "; ".join(f'entry {i} of the jump table at {t["table"]} (used by the instruction at {t.get("jump", "?")})'
+                                                      for t, i in cases) + " (no direct call)"
         elif r.get("via_table"):
             callers = "reached through a jump table (no direct call)"
         else:

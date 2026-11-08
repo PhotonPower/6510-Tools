@@ -99,6 +99,24 @@ after:  .BYTE $FF
         std::string text;
         CHECK(verifiedListing(p, an, Annotations{}, &text));
         CHECK(has(text, ".LO sub_" + hexDigits(p["case0"], 4) + "-1,"));
+        // marked as data (as the orchestrator or a model does), the table stays linked to the RTS that uses it
+        Annotations ann;
+        DataRegion r;
+        r.address = p["lo"];
+        r.partner = p["hi"];
+        r.length = 3;
+        r.kind = DataKind::Lohi;
+        r.minusOne = true;
+        CHECK(!ann.setData(r));
+        Analysis an2(p.mem, p.from, p.to);
+        an2.setDataBarrier([&ann](Address a) { return ann.dataCovering(a) != nullptr; });
+        an2.addEntry(p["main"]);
+        an2.addLohiTable(r.address, r.partner, r.length, true);
+        an2.analyzeFlow();
+        CHECK_EQ(an2.jumpTables().size(), std::size_t{1});
+        CHECK_EQ(an2.jumpTables()[0].jump, static_cast<Address>(p["main"] + 8));
+        for (const RoutineInfo& ri : an2.routines())
+            if (ri.entry == p["main"]) CHECK_EQ(ri.callees.size(), std::size_t{3});
         CHECK(has(text, ".HI sub_" + hexDigits(p["case0"], 4) + "-1,"));
     }
 

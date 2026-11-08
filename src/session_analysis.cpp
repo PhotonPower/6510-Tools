@@ -201,6 +201,10 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
             std::string kind = "unknown", name, preview;
             unsigned length = 0;
             const DataRegion* region = ann.dataCovering(t);
+            const JumpTable* table = nullptr;
+            for (const JumpTable& jt : an.jumpTables()) {
+                if (t == jt.table || (jt.split && t == jt.hiTable) || (!jt.split && t == static_cast<Address>(jt.table + 1))) table = &jt;
+            }
             if (selfmod.count(t)) {
                 kind = "selfmod";
                 const auto start = an.instructionStart(t);
@@ -209,6 +213,13 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
             } else if (an.isCode(t)) {
                 kind = "code";
                 name = routineName(t);
+            } else if (table && !region) {
+                kind = "jump_table";
+                name = "data_" + hexDigits(t, 4);
+                length = static_cast<unsigned>(table->slots.size());
+                preview = std::string(table->split ? (t == table->hiTable ? "high bytes" : "low bytes") : "words") + (table->minusOne ? " of (target - 1)" : "") +
+                          " of " + std::to_string(table->slots.size()) + " targets:";
+                for (std::size_t i = 0; i < table->targets.size() && i < 8; ++i) preview += " " + routineName(table->targets[i]);
             } else if (region) {
                 kind = toString(region->kind);
                 length = region->length;
@@ -233,8 +244,13 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
                 kind = "io";
                 name = C64::registerName(t);
             } else if (kernalSymbols().count(t) && m_.c64()) {
-                kind = "kernal";
+                kind = t >= 0xE000 ? "kernal" : "system";
                 name = kernalSymbols().at(t);
+                preview = Kernal::describeAddress(t);
+            } else if (m_.c64() && !an.inRange(t) && !Kernal::describeAddress(t).empty()) {
+                kind = t >= 0xA000 ? "rom" : "system";
+                name = "$" + hexDigits(t, 4);
+                preview = Kernal::describeAddress(t);
             } else if (t < 0x100) {
                 kind = "zeropage";
                 name = "$" + hexDigits(t, 2);
@@ -443,6 +459,14 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         const Address a = address("addr");
         if (analysis_ && analysis_->isCode(a) && !analysis_->at(a))
             throw AnalysisError("address " + hex4(a) + " is in the middle of an instruction; the comment would never appear. Use the address of the instruction's first byte");
+        if (const DataRegion* r = ann.dataCovering(a); r && a != r->address && !(r->kind == DataKind::Lohi && a == r->partner))
+            throw AnalysisError("address " + hex4(a) + " is inside the data region at " + hex4(r->address) + " (" + toString(r->kind) +
+                                "); comment the region with ann_data ... comment, or its first address " + hex4(r->address));
+        if (analysis_ && analysis_->isTableData(a)) {
+            bool start = false;
+            for (const JumpTable& t : analysis_->jumpTables()) start = start || a == t.table || (t.split && a == t.hiTable);
+            if (!start) throw AnalysisError("address " + hex4(a) + " is inside a jump table; comment its first address");
+        }
         if (flag("block")) ann.setBlockComment(a, str("text"));
         else ann.setComment(a, str("text"));
         return ok;
@@ -452,6 +476,10 @@ Json Session::analysisCommand(const std::string& cmd, const Json& req) {
         if (analysis_ && !analysis_->at(a))
             throw AnalysisError("address " + hex4(a) + " is not the first byte of an analysed instruction; a constant is marked on the instruction with the immediate");
         ann.setConstant(a, !flag("remove"));
+        const Instruction* in = analysis_ ? analysis_->at(a) : nullptr;
+        if (in && !flag("remove") && !analysis_->pointerImmediates().count(a))
+            ok.set("note", in->mode == Mode::Immediate ? "this immediate is written as a number anyway (it is not taken as half of an address)"
+                                                       : "this instruction has no immediate operand; the mark has no effect");
         return ok;
     }
     if (cmd == "ann_remove") {

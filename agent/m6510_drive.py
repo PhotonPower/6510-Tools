@@ -19,6 +19,7 @@ The tools are those of the orchestrator (see TOOLS in m6510_annotate.py): get_li
 reset_machine, name_label, document_routine, name_variable, mark_data, add_comment, mark_constant, finish_routine. The annotations are kept in W/project.json after every command.
 """
 import argparse
+import base64
 import contextlib
 import importlib.util
 import io
@@ -200,6 +201,12 @@ def cmd_tool(a):
                 pass
         result = ws.tools.dispatch(name, args)
         print(result)
+        for image in ws.tools.images:    # what a model with vision would see: kept as files
+            n = len([f for f in os.listdir(a.work) if f.startswith("screenshot_")]) + 1
+            path = os.path.join(a.work, f"screenshot_{n:03d}.png")
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(image))
+            print(f"(the image is saved as {path})")
         if name in ANNOTATING and not result.startswith("error"):
             ws.worker.save()
         if name == "finish_routine" and ws.tools.current:

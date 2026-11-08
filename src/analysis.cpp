@@ -259,6 +259,12 @@ void Analysis::detectTables(std::vector<Address>& work) {
             t.jump = a;
             t.minusOne = minusOne;
             const bool words = hi == static_cast<Address>(lo + 1);
+            for (JumpTable& known : tables_) {
+                if (known.table == lo && known.jump == 0) {  // annotated (ann_data): this is the instruction that uses it
+                    known.jump = a;
+                    return;
+                }
+            }
             const unsigned n = tableLength(lo, hi, words ? 2 : 1, minusOne);
             if (n == 0) return;
             t.table = lo;

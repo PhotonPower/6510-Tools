@@ -101,5 +101,21 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   Entscheidungsvorschlägen und offenen Fragen).
 
 ### Behoben
+- **Befunde aus dem Blindtest** (ein Claude-Agent übernahm mit `m6510_drive.py` die Rolle des Modells, nur mit dem PRG;
+  Ergebnis: alle 10 Routinen dokumentiert, Listing verifiziert, rund 115 Werkzeugaufrufe):
+  - Listing-Ausschnitte benennen Adressen im analysierten Programm jetzt genauso wie das ganze Listing (vorher `#$B3` statt
+    `#<data_08B3` und rohe Adressen, sobald das Ziel außerhalb des Ausschnitts lag; ein Modell hätte echte Zeiger als
+    Konstanten markiert).
+  - Kommentare an Datenzeilen und die Kommentare von `ann_variable` erscheinen im Listing (vorher stillschweigend verloren);
+    eine benannte Variable und ein einzeln benutztes Byte bekommen eine eigene Zeile statt in `.FILL` aufzugehen;
+    `ann_comment` mitten in einem Datenbereich oder einer Sprungtabelle wird mit Erklärung abgelehnt.
+  - Mit `addresses:true` steht die Adresse immer vorn im Kommentar (`; $0860: Text`); „operand changed by the code at …“
+    statt des missverständlichen „written by … / $0860“.
+  - Annotierte Sprungtabellen bleiben mit ihrem `RTS`/`JMP` verknüpft (vorher verloren die Verteiler ihre Aufgerufenen).
+  - `references` beschreibt Sprungtabellen, KERNAL-ROM-Adressen (`$EA31`), RAM-Vektoren (`CINV` & Co., jetzt auch als Namen
+    im Listing) und Sprite-Zeiger; `ann_constant` meldet, wenn die Markierung nichts bewirkt.
+  - Orchestrator: `get_listing` mit inklusivem Ende; der Auftrag nennt die benutzten Sprungtabellen und bei jedem Fall
+    Tabelle und Index; `run_routine` meldet Sprites und erklärt das doppelte Schreiben von `INC $D019`; die
+    Vollständigkeitsprüfung meldet unbenannte `data_`-Operanden; `m6510_drive.py` speichert Screenshots als PNG.
 - `set` mit `P` (Sitzung) und `r p=…` (Monitor): Ein neues `I`-Flag galt für die Interrupt-Abfrage erst nach einem weiteren
   Befehl, als wäre es mit `CLI`/`SEI` gesetzt worden.
