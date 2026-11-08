@@ -7,6 +7,21 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Meilenstein 0.3, zweiter und dritter Teil – Snapshots, Sitzung, C64:**
+  - **`m6510::C64`:** Speicherkarte mit allen `$01`-Konfigurationen, ROMs laden, Farb-RAM, VIC-II/SID/CIA-Register mit
+    Schreibprotokoll und Registernamen („Mapping the Commodore 64“), Rasterzeile und CIA-1-Timer A aus dem Zyklenzähler mit
+    Raster- und Timer-IRQ, IRQ von außen.
+  - **`m6510::Kernal`:** KERNAL-Emulation mit erzeugtem 8-KiB-Abbild (echte Sprungtabelle über die RAM-Vektoren, IRQ-/NMI-
+    Einsprung als 6502-Code), `CHROUT` auf Konsole und Bildschirm, `GETIN`/`CHRIN` mit Tastenpuffer, `PLOT`, Uhr, `LOAD`/
+    `SAVE`, `CINT`/`IOINIT`/`RAMTAS`/`RESTOR`, Aufrufprotokoll; Programmstart wie `SYS`, Ende bei Rückkehr ins BASIC oder `BRK`.
+  - **Snapshots** (`M6510SN1`) mit Speicher-Diff; **`m6510::Session`** und **`m6510tool serve`** (JSON-Zeilenprotokoll mit den
+    Befehlen der Schwesterprojekte und den C64-Befehlen `run_program`, `io`, `kernalcalls`, `console`, `keys`, `screen`,
+    `attach`, `load_rom`); Beispielsitzung `examples/agent_session.jsonl`.
+  - Tests `c64`, `session` (inklusive Rollback-Determinismus, abgelehnter Snapshot-Abkürzungen, 3000 Zufallsbefehle),
+    `cli_serve`.
+  - `Memory` hält die 64 KiB auf dem Heap (Stapelüberlauf unter Windows im Test `cpu`).
+  - Offene Frage 2 entschieden: Registernamen nach „Mapping the Commodore 64“. Lorenz-Testsuite zurückgestellt (keine
+    stabile Quelle).
 - **Meilenstein 0.3, erster Teil – Prozessorkern** (`m6510::Cpu`): alle 256 Opcodes (undokumentierte und instabile nach
   Tom Hartes Testsatz, `JAM` hält an), NMOS-Dezimalmodus, Zyklen pro Befehl, IRQ/NMI/`BRK`/RESET mit der Verzögerung nach
   `CLI`/`SEI`/`PLP`, Prozessorport `$00/$01` (abschaltbar), doppeltes Schreiben der Read-Modify-Write-Befehle;

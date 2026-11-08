@@ -1,7 +1,8 @@
 # Emulator
 
-> **Stand:** Der Prozessorkern (`m6510::Cpu`) ist umgesetzt und geprüft (Meilenstein 0.3, erster Teil): alle 2,44 Millionen
-> Einzelbefehls-Tests von Tom Harte und Klaus Dormanns Funktionstest bestehen. Snapshots, Sitzung und C64-Maschine folgen.
+> **Stand 0.3:** Prozessorkern (`m6510::Cpu`), Snapshots, die JSON-Sitzung (`m6510tool serve`,
+> [agent-protocol.md](agent-protocol.md)) und die C64-Maschine mit KERNAL-Emulation ([c64.md](c64.md)) sind umgesetzt und
+> geprüft: alle 2,44 Millionen Einzelbefehls-Tests von Tom Harte und Klaus Dormanns Funktionstest bestehen.
 
 `m6510::Cpu` (`include/m6510/cpu.hpp`) ist ein **befehlsgenauer** NMOS-6510-Kern: Für jeden Befehl stimmen Register, Flags,
 Speicherinhalt und die **Zahl der Zyklen**; einzelne Buszyklen werden nicht modelliert (Entscheidung in der
@@ -87,8 +88,9 @@ Repository aufgenommen ([testing.md](testing.md)):
 2. **Klaus Dormanns Funktionstest** (`6502_functional_test.bin`, GPL-3.0, zur Laufzeit geholt; `tools/dormann_runner.cpp`,
    CI-Job `functional`): endet nach 30,6 Millionen Befehlen an der Erfolgsadresse `$3469`. Der Dezimaltest liegt nur als
    Quelltext vor; den Dezimalmodus decken die Einzelbefehls-Tests ab (160 000 Fälle für `ADC`/`SBC`, dazu `ARR`, `RRA`, `ISC`).
-3. **Testsuite von Wolfgang Lorenz** (C64-Programme je Befehl/Thema) auf der C64-Maschine mit KERNAL-Emulation – geplant,
-   sobald die Maschine steht.
+3. **Testsuite von Wolfgang Lorenz** (C64-Programme je Befehl/Thema) – zurückgestellt: es fand sich keine stabile, frei
+   abrufbare Quelle (im GitHub-Spiegel von VICE fehlen die Testprogramme). Die Prozessorbefehle decken die Einzelbefehls-Tests
+   vollständig ab; die C64-Teile der Suite (CIA-Timer, Interrupt-Feinheiten) bräuchten genauere Gerätemodelle als vorhanden.
 4. **Differenztest** gegen eine unabhängige Referenz (Kandidat: perfect6502) – geplant; durch den vollständigen Einzelbefehls-
    Testsatz weniger dringend als beim MC68000.
 5. **Unit-Tests** (`tests/test_cpu.cpp`, rund 350 Prüfungen): von Hand gerechnete Ergebnisse und Flags, Seitenfehler,
@@ -104,7 +106,9 @@ KERNAL-Aufrufe.
 
 ## Snapshots
 
-`capture(machine)` / `restore(machine, snapshot)` sichern und setzen Prozessor- und Maschinenzustand; `serialize()` /
-`deserializeSnapshot()` schreiben/lesen die Datei (`M6510SN1`, [formats.md](formats.md#snapshot-m6510sn1)). Das
-Zurückspielen muss **bit-identisch** sein: ein erneuter Lauf liefert dieselben Register, Zyklen und denselben Speicher
-(Test). Haltepunkte und Hooks gehören nicht zum Zustand.
+`m6510::Snapshot` (`include/m6510/snapshot.hpp`) enthält Prozessorzustand, RAM und auf dem C64 den Zustand der Bausteine,
+das Farb-RAM und den Tastenpuffer der KERNAL-Emulation; die Sitzung legt sie für `checkpoint`/`rollback` an.
+`serialize()` / `deserializeSnapshot()` schreiben/lesen die Datei (`M6510SN1`, [formats.md](formats.md#snapshot-m6510sn1));
+jede Abkürzung der Datei wird abgelehnt (Test). Das Zurückspielen ist **bit-identisch**: Checkpoint → Lauf → Rollback →
+Lauf liefert dieselbe Antwort (Test `session`). Haltepunkte, Watchpoints, Hooks und ROM-Abbilder gehören nicht zum Zustand.
+`diffBytes()` liefert die geänderten Bereiche für `diff`.

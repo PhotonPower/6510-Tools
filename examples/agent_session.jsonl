@@ -1,0 +1,15 @@
+{"cmd":"machine","type":"c64"}
+{"cmd":"asm","source":"        * = $0801\n        .BASIC\nstart:  LDX #0\nnext:   LDA msg,X\n        BEQ done\n        JSR CHROUT\n        INX\n        BNE next\ndone:   LDA #2\n        STA $D020\n        RTS\nmsg:    .BYTE $93,\"HELLO FROM THE 6510\",13,0"}
+{"cmd":"checkpoint","name":"loaded"}
+{"cmd":"run_program"}
+{"cmd":"console"}
+{"cmd":"screen"}
+{"cmd":"io"}
+{"cmd":"kernalcalls"}
+{"cmd":"diff","name":"loaded"}
+{"cmd":"rollback","name":"loaded"}
+{"cmd":"dis","addr":"start","count":6}
+{"cmd":"break","addr":"done"}
+{"cmd":"run_program"}
+{"cmd":"regs"}
+{"cmd":"call","addr":"next","regs":{"X":6}}

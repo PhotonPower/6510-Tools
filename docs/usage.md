@@ -1,7 +1,7 @@
 # Benutzung von `m6510tool`
 
-> **Stand 0.2:** `asm`, `dis` und `basic list` sind umgesetzt (Eingabe PRG, P00, Raw). `monitor`, `serve`, `d64`, `t64`,
-> `crt` und die Disassembler-Eingabe aus Images sind die Spezifikation für die Meilensteine 0.3–0.6. Optionen orientieren
+> **Stand 0.3:** `asm`, `dis`, `basic list` und `serve` sind umgesetzt. `monitor`, `d64`, `t64`, `crt` und die
+> Disassembler-Eingabe aus Images sind die Spezifikation für die Meilensteine 0.4–0.6. Optionen orientieren
 > sich an `z80tool` und `m68ktool`, damit man zwischen den Projekten nicht umlernen muss.
 
 ```sh
@@ -86,10 +86,12 @@ m6510tool monitor [datei] [--org adresse] [--c64] [--roms verzeichnis] [--no-fil
 
 Siehe [monitor.md](monitor.md).
 
-## `serve` – Emulator-Server für Agenten (geplant, 0.3)
+## `serve` – Emulator-Server für Agenten
 
 ```sh
 m6510tool serve [--allow-files]
+m6510tool serve < examples/agent_session.jsonl
 ```
 
-Siehe [agent-protocol.md](agent-protocol.md).
+Eine JSON-Anfrage je Zeile auf stdin, eine Antwort je Zeile auf stdout; `--allow-files` erlaubt Dateizugriff. Siehe
+[agent-protocol.md](agent-protocol.md).
