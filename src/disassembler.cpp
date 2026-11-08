@@ -368,6 +368,8 @@ const std::map<Address, std::string>& kernalSymbols() {
         {0xFFCC, "CLRCHN"}, {0xFFCF, "CHRIN"},  {0xFFD2, "CHROUT"}, {0xFFD5, "LOAD"},   {0xFFD8, "SAVE"},
         {0xFFDB, "SETTIM"}, {0xFFDE, "RDTIM"},  {0xFFE1, "STOP"},   {0xFFE4, "GETIN"},  {0xFFE7, "CLALL"},
         {0xFFEA, "UDTIM"},  {0xFFED, "SCREEN"}, {0xFFF0, "PLOT"},   {0xFFF3, "IOBASE"},
+        // the RAM vectors of the KERNAL ("Mapping the Commodore 64")
+        {0x0314, "CINV"},   {0x0316, "CBINV"},  {0x0318, "NMINV"},
     };
     return k;
 }

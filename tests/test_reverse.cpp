@@ -212,7 +212,7 @@ data:   .BYTE 1, 2, 3
         CHECK(has(r.text, "CHROUT          = $FFD2"));
         CHECK(has(r.text, "EXTCOL          = $D020"));
         CHECK(has(r.text, "INC loc_" + hexDigits(sym(p, "patch"), 4) + "+1"));
-        CHECK(has(r.text, "self-modifying: written by"));
+        CHECK(has(r.text, "operand changed by the code at"));
         CHECK_EQ(r.instructions, 17U);
         // names, comments, a routine header
         CHECK(!ann.setLabel(sym(p, "sub1"), "show"));
@@ -241,18 +241,33 @@ data:   .BYTE 1, 2, 3
         CHECK(has(r.text, "JSR show"));
         CHECK(has(r.text, "LDA (ptr),Y"));
         CHECK(has(r.text, "ptr             = $00FB"));
-        CHECK(has(r.text, "; start here / $C000"));
+        CHECK(has(r.text, "; $C000: start here"));
         CHECK(has(r.text, "; the end\n; of everything\n"));
         CHECK(has(r.text, "numbers:\n        .BYTE $01,$02,$03"));
-        CHECK(has(r.text, "; three numbers"));
+        CHECK(has(r.text, ": three numbers"));
         CHECK_EQ(r.userComments, 1U);
-        // a part of the range, truncation
+        // a part of the range: names outside it are the same as in the whole listing (and EQU lines keep it assemblable)
         ListingOptions o;
-        o.from = sym(p, "sub1");
-        o.to = sym(p, "sub2");
+        o.from = sym(p, "sub2");
+        o.to = sym(p, "tail");
         r = renderListing(p.mem, an, ann, o);
         CHECK(r.verified);
-        CHECK(!has(r.text, "main"));
+        if (!r.verified) std::cerr << r.problem << "\n" << r.text;
+        CHECK(has(r.text, "JSR show"));
+        CHECK(!has(r.text, "main:"));
+        o.equates = false;
+        o.verify = false;
+        r = renderListing(p.mem, an, ann, o);
+        CHECK(!has(r.text, ".CPU"));
+        CHECK(has(r.text, "JSR show"));
+        o.from = sym(p, "tail");
+        o.to = p.to;
+        r = renderListing(p.mem, an, ann, o);
+        CHECK(has(r.text, "BEQ loc_"));                        // inside the excerpt
+        o.from = sym(p, "main");
+        o.to = sym(p, "sub1");
+        r = renderListing(p.mem, an, ann, o);
+        CHECK(has(r.text, "JMP loc_" + hexDigits(sym(p, "tail"), 4)));  // outside: the same placeholder name
         o.from = p.from;
         o.to = p.to;
         o.maxChars = 200;
@@ -260,6 +275,43 @@ data:   .BYTE 1, 2, 3
         CHECK(r.truncated);
         CHECK(!r.verified);
         CHECK(r.text.size() < 260);
+    }
+
+    // ---- comments on data, variables split from zero runs, variable comments on EQU lines -------------------
+    {
+        const Program p = build(R"(
+        * = $C000
+main:   INC counter
+        LDA table+3
+        STA $FB
+        RTS
+counter: .BYTE 0
+        .FILL 30
+table:  .FILL 20
+)");
+        Analysis an(p.mem, p.from, p.to);
+        an.addEntry(sym(p, "main"));
+        an.analyzeFlow();
+        Annotations ann;
+        VariableDoc v;
+        v.name = "zp_out";
+        v.address = 0xFB;
+        v.comment = "result for the caller";
+        CHECK(!ann.setVariable(v));
+        ann.setComment(static_cast<Address>(sym(p, "table") + 5), "the sixth entry");
+        ListingResult r = listing(p, an, ann, true);
+        CHECK(r.verified);
+        if (!r.verified) std::cerr << r.problem << "\n" << r.text;
+        CHECK(has(r.text, "zp_out          = $00FB                 ; result for the caller"));
+        CHECK(has(r.text, "data_" + hexDigits(sym(p, "counter"), 4) + ":\n        .BYTE $00"));  // the counter is not swallowed by .FILL
+        CHECK(has(r.text, ": the sixth entry"));
+        v.name = "count";
+        v.address = sym(p, "counter");
+        v.comment = "how often main ran";
+        CHECK(!ann.setVariable(v));
+        r = listing(p, an, ann, true);
+        CHECK(r.verified);
+        CHECK(has(r.text, "count:\n        .BYTE $00                       ; $" + hexDigits(sym(p, "counter"), 4) + ": how often main ran"));
     }
 
     // ---- pointer constants in immediate pairs, interrupt handlers, linear analysis ----------------------

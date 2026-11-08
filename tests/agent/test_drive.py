@@ -58,7 +58,21 @@ class DriveTest(unittest.TestCase):
         self.assertIn("interrupt handler installed through the vector at 0x0314", out)
         self.assertIn("writes BGCOL0", out)
         out, _ = self.drive("show", "0x0854")
-        self.assertIn("reached through a jump table", out)
+        self.assertIn("reached through entry 0 of the jump table at 0x08A7 (used by the instruction at 0x0846)", out)
+        out, _ = self.drive("show", "0x083E")
+        self.assertIn("jump table at 0x08A7 / 0x08AA (the RTS trick (entries are target - 1)), used at 0x0846: entry 0 -> sub_0854", out)
+        self.assertIn("(jump_table, 3 bytes): low bytes of (target - 1)", out)
+        self.assertIn("LDA data_08AA,X", out)                                  # named the same as in the whole listing
+        self.assertIn("LDA #<data_08B3", out_main)                             # the pointer pair, also in an excerpt
+        self.assertIn("0xEA31 (the KERNAL's IRQ handler", self.drive("show", "0x0898")[0])
+        out, _ = self.drive("tool", "run_routine", json.dumps({"addr": "0x0878"}))
+        self.assertIn("sprite 0 (switched on by this run): x=100 y=100, data at 0x0900 (pointer 36)", out)
+        out, _ = self.drive("tool", "run_routine", json.dumps({"addr": "0x0898", "screenshot": True}))
+        self.assertIn("read-modify-write instructions", out)
+        self.assertIn("the image is saved as", out)
+        self.assertTrue(any(f.startswith("screenshot_") for f in os.listdir(self.work)))
+        out, _ = self.drive("tool", "get_listing", json.dumps({"from": "0x085A", "to": "0x0869"}))
+        self.assertIn("RTS                             ; $0869", out)          # `to` is inclusive
         out, _ = self.drive("show", "0x082D", "--system")
         self.assertIn("expert 6510 (6502) and Commodore 64 reverse engineer", out)
 

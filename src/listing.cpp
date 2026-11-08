@@ -59,7 +59,7 @@ private:
     const Annotations& ann_;
     const ListingOptions& o_;
     std::map<Address, Item> items_;
-    std::set<Address> needLabel_, labelUsed_, routineEntries_;
+    std::set<Address> needLabel_, labelUsed_, routineEntries_, scalarRefs_;
     std::map<Address, std::string> equates_;  // address -> name used outside the range
     std::map<std::string, Address> equateNames_;
 
@@ -73,6 +73,13 @@ private:
     std::vector<std::string> renderItem(const Item& it, unsigned& userComments, unsigned& instructions);
     std::vector<std::string> renderCode(const Item& it, unsigned& userComments);
     std::string tableEntry(Address target, bool minusOne, Address raw);
+    /// "$0860: first / second" (the address only with the `addresses` option).
+    [[nodiscard]] std::string commentText(Address a, const std::vector<std::string>& parts) const {
+        std::string c;
+        for (const std::string& x : parts) c += (c.empty() ? "" : " / ") + x;
+        if (o_.addresses) c = h4(a) + (c.empty() ? "" : ": " + c);
+        return c;
+    }
 };
 
 std::string Renderer::nameFor(Address a) const {
@@ -110,6 +117,20 @@ std::string Renderer::symExpr(Address a) {
         }
         if (const auto at = ann_.addressOf(base); at && inList(*at)) return labelExpr(a);
     }
+    if (an_.inRange(a)) {
+        // outside this excerpt but inside the analysed program: the name the whole listing gives it, so that an excerpt
+        // reads the same as the full listing (an EQU line keeps a verified excerpt assemblable)
+        Address base = a;
+        std::string suffix;
+        if (const auto start = an_.instructionStart(a); start && *start != a) {
+            base = *start;
+            const unsigned off = a - base;
+            suffix = "+" + std::to_string(off);
+        }
+        const std::string n = nameFor(base);
+        useEquate(n, base);
+        return n + suffix;
+    }
     if (o_.c64Names) {
         const auto& k = kernalSymbols();
         if (const auto it = k.find(a); it != k.end() && isValidSymbolName(it->second)) {
@@ -132,7 +153,10 @@ void Renderer::collectReferences() {
     for (const auto& [a, in] : an_.code()) {
         if (!inList(a)) continue;
         if (in.target && inList(*in.target)) needLabel_.insert(*in.target);
-        if (in.reference && inList(*in.reference)) needLabel_.insert(*in.reference);
+        if (in.reference && inList(*in.reference)) {
+            needLabel_.insert(*in.reference);
+            if (in.mode == Mode::Absolute || in.mode == Mode::ZeroPage) scalarRefs_.insert(*in.reference);
+        }
     }
     for (const auto& [a, p] : an_.pointerImmediates())
         if (inList(a) && inList(p.first)) needLabel_.insert(p.first);
@@ -166,6 +190,16 @@ void Renderer::buildItems() {
         if (r.kind == DataKind::Lohi) boundaries.insert(r.partner);
     }
     for (const auto& [a, t] : tableStarts) boundaries.insert(a);
+    for (const auto& [a, c] : ann_.comments()) boundaries.insert(a);       // a commented data byte starts a line
+    for (const auto& [a, c] : ann_.blockComments()) boundaries.insert(a);
+    for (const VariableDoc& v : ann_.variables()) {                       // a named variable is a line of its own
+        boundaries.insert(v.address);
+        boundaries.insert(static_cast<Address>(v.address + v.size));
+    }
+    for (const Address a : scalarRefs_) {                                 // so is a byte used as a single variable
+        boundaries.insert(a);
+        boundaries.insert(static_cast<Address>(a + 1));
+    }
 
     std::uint32_t a = o_.from;
     while (a < o_.to) {
@@ -263,15 +297,11 @@ std::vector<std::string> Renderer::renderCode(const Item& it, unsigned& userComm
     if (const auto sm = an_.selfModified().find(it.start); sm != an_.selfModified().end()) {
         std::string w;
         for (const Address x : sm->second) w += (w.empty() ? "" : ", ") + h4(x);
-        comments.push_back("self-modifying: written by " + w);
+        comments.push_back("operand changed by the code at " + w);
     }
-    if (o_.addresses) comments.push_back(h4(it.start));
     std::string line = "        " + text;
-    if (!comments.empty()) {
-        std::string c;
-        for (const std::string& x : comments) c += (c.empty() ? "" : " / ") + x;
-        line = pad(line, 40) + "; " + c;
-    }
+    const std::string c = commentText(it.start, comments);
+    if (!c.empty()) line = pad(line, 40) + "; " + c;
     return {line};
 }
 
@@ -433,15 +463,19 @@ std::vector<std::string> Renderer::renderItem(const Item& it, unsigned& userComm
                     break;
                 }
             }
-            if (!r.comment.empty() && !lines.empty() && !it.hiSide) {
-                if (lines[0].find(';') == std::string::npos) lines[0] = pad(lines[0], 40) + "; " + r.comment;
-                else lines.insert(lines.begin(), "; " + r.comment);
-            }
             break;
         }
         case Item::Code: break;
     }
-    if (o_.addresses && !lines.empty() && lines[0].find(';') == std::string::npos) lines[0] = pad(lines[0], 40) + "; " + h4(it.start);
+    std::vector<std::string> parts;
+    if (const std::string* c = ann_.commentAt(it.start)) parts.push_back(*c);
+    if (const VariableDoc* v = ann_.variableAt(it.start); v && !v->comment.empty()) parts.push_back(v->comment);
+    if (it.region && !it.region->comment.empty() && !it.hiSide && it.region->address == it.start) parts.push_back(it.region->comment);
+    const std::string c = commentText(it.start, parts);
+    if (!c.empty() && !lines.empty()) {
+        if (lines[0].find(';') == std::string::npos) lines[0] = pad(lines[0], 40) + "; " + c;
+        else lines.insert(lines.begin(), "; " + c);
+    }
     return lines;
 }
 
@@ -462,7 +496,8 @@ ListingResult Renderer::run() {
         if (!equates_.empty()) out += "\n";
         for (const auto& [a, n] : equates_) {
             std::string l = pad(n, 16) + "= " + h4(a);
-            if (o_.c64Names && kernalSymbols().count(a)) l = pad(l, 40) + "; KERNAL";
+            if (const VariableDoc* v = ann_.variableAt(a); v && !v->comment.empty()) l = pad(l, 40) + "; " + v->comment;
+        else if (o_.c64Names && kernalSymbols().count(a)) l = pad(l, 40) + "; KERNAL";
             else if (a >= 0xD000 && a < 0xE000 && isBaseRegister(a) && n == C64::registerName(a)) l = pad(l, 40) + "; chip register";
             out += l + "\n";
         }

@@ -117,6 +117,30 @@ std::string Kernal::entryName(Address a) {
     return "";
 }
 
+std::string Kernal::describeAddress(Address a) {
+    switch (a) {
+        case 0x0314: return "CINV: IRQ vector (RAM), normally $EA31";
+        case 0x0315: return "CINV+1: high byte of the IRQ vector";
+        case 0x0316: return "CBINV: BRK vector (RAM)";
+        case 0x0317: return "CBINV+1: high byte of the BRK vector";
+        case 0x0318: return "NMINV: NMI vector (RAM)";
+        case 0x0319: return "NMINV+1: high byte of the NMI vector";
+        case 0xEA31: return "the KERNAL's IRQ handler (clock, cursor, keyboard); it ends at $EA81";
+        case 0xEA81: return "the end of the KERNAL's IRQ handler: restores Y, X, A from the stack and returns with RTI";
+        case 0xFE47: return "the KERNAL's NMI handler";
+        case 0xFF48: return "the KERNAL's IRQ/BRK entry: pushes A, X, Y and jumps through CINV ($0314) or CBINV ($0316)";
+        default: break;
+    }
+    if (a >= 0x07F8 && a <= 0x07FF) return "sprite pointer " + std::to_string(a - 0x07F8) + " (with the screen at $0400): block = value * 64";
+    if (a >= 0x0400 && a < 0x07E8) return "screen memory (row " + std::to_string((a - 0x0400) / 40) + ", column " + std::to_string((a - 0x0400) % 40) + ")";
+    if (a >= 0xD800 && a < 0xDBE8) return "colour RAM (row " + std::to_string((a - 0xD800) / 40) + ", column " + std::to_string((a - 0xD800) % 40) + ")";
+    const std::string name = entryName(a);
+    if (!name.empty()) return "KERNAL: " + name;
+    if (a >= 0xE000) return "inside the KERNAL ROM";
+    if (a >= 0xA000 && a < 0xC000) return "inside the BASIC ROM";
+    return "";
+}
+
 void Kernal::install() {
     auto& img = c64_.kernalRomForEmulation();
     img.fill(0x60);  // never executed: the hook takes every address that is not real code
