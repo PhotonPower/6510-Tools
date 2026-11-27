@@ -252,6 +252,17 @@ int main() {
         call(s, R"({"cmd":"write","addr":"0x080D","hex":"00"})");
         r = call(s, R"({"cmd":"run_program","addr":"go"})");
         CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0x080D","len":1})"), "hex"), std::string("EE"));
+        // the command channel of the drive after the LOAD: TALK 8, TKSA $6F, ACPTR until RETURN reads "00, OK,00,00"
+        call(s, R"({"cmd":"asm","source":"st: LDA #8\n JSR TALK\n LDA #$6F\n JSR TKSA\n LDX #0\nrd: JSR ACPTR\n STA $C100,X\n INX\n CMP #13\n BNE rd\n JSR READST\n STA $C1FF\n JSR UNTLK\n RTS","origin":"0xC040"})");
+        r = call(s, R"({"cmd":"run_program","addr":"st","max_instructions":2000})");
+        CHECK_EQ(str(r, "stop"), std::string("exit"));
+        CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0xC100","len":13})"), "ascii"), std::string("00, OK,00,00."));
+        CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0xC1FF","len":1})"), "hex"), std::string("40"));  // end of information
+        // a file that is not there: status 62
+        call(s, R"({"cmd":"attach","file":"."})");
+        call(s, R"({"cmd":"asm","source":"go2: LDA #2\n LDX #<n2\n LDY #>n2\n JSR SETNAM\n LDA #1\n LDX #8\n LDY #1\n JSR SETLFS\n LDA #0\n JSR LOAD\n JMP st\nn2: .BYTE \"ZQ\"","origin":"0xC080"})");
+        r = call(s, R"({"cmd":"run_program","addr":"go2","max_instructions":4000})");
+        CHECK_EQ(str(call(s, R"({"cmd":"read","addr":"0xC100","len":2})"), "ascii"), std::string("62"));
         // a generic machine refuses a C64 snapshot
         Session g(so);
         CHECK(!ok(call(g, R"({"cmd":"load_state","file":"m6510_session_test.snap"})")));

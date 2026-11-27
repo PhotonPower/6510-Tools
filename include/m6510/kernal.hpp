@@ -71,9 +71,21 @@ public:
 
     struct State {
         std::deque<Byte> keys;
+        std::string driveStatus;   ///< what the disk drive answers on its command channel (not stored in snapshots)
+        std::size_t driveStatusPos = 0;
+        Byte talkDevice = 0, talkSecondary = 0;
     };
-    [[nodiscard]] State state() const { return {keys_}; }
-    void setState(const State& s) { keys_ = s.keys; }
+    [[nodiscard]] State state() const { return {keys_, driveStatus_, driveStatusPos_, talkDevice_, talkSecondary_}; }
+    void setState(const State& s) {
+        keys_ = s.keys;
+        driveStatus_ = s.driveStatus.empty() ? std::string(kDriveReset) : s.driveStatus;
+        driveStatusPos_ = s.driveStatusPos;
+        talkDevice_ = s.talkDevice;
+        talkSecondary_ = s.talkSecondary;
+    }
+    /// The message of a 1541 after power-on and after an operation without error.
+    static constexpr const char* kDriveReset = "73,CBM DOS V2.6 1541,00,00\r";
+    static constexpr const char* kDriveOk = "00, OK,00,00\r";
 
     std::size_t maxCalls = 4096;
 
@@ -82,6 +94,9 @@ private:
     Cpu& cpu_;
     Memory& ram_;
     std::deque<Byte> keys_;
+    std::string driveStatus_ = kDriveReset;
+    std::size_t driveStatusPos_ = 0;
+    Byte talkDevice_ = 0, talkSecondary_ = 0;
     std::string console_;
     std::vector<KernalCall> calls_;
 

@@ -467,6 +467,10 @@ bool Kernal::emulate(const std::string& n, Registers& r, std::string& note) {
         const unsigned device = ram_.read8(0xBA);
         std::optional<Program> p;
         if (files) p = files(name, device);
+        if (device >= 8) {  // the drive remembers the result for its command channel
+            driveStatus_ = p ? kDriveOk : "62,FILE NOT FOUND,00,00\r";
+            driveStatusPos_ = 0;
+        }
         if (!p) {
             note = "file \"" + name + "\" not found on device " + std::to_string(device);
             setC(true);
@@ -482,7 +486,7 @@ bool Kernal::emulate(const std::string& n, Registers& r, std::string& note) {
             if (verify) same = same && ram_.read8(a) == p->bytes[i];
             else ram_.write8(a, p->bytes[i]);
         }
-        const auto end = static_cast<Address>(std::min<std::size_t>(at + p->bytes.size(), 0xFFFF));
+        const auto end = static_cast<Address>(at + p->bytes.size());  // a file that ends at $FFFF leaves $0000 like the KERNAL
         r.x = static_cast<Byte>(end);
         r.y = static_cast<Byte>(end >> 8);
         ram_.write16(0xAE, end);
@@ -516,6 +520,30 @@ bool Kernal::emulate(const std::string& n, Registers& r, std::string& note) {
             if (r.flag(kFlagC)) ram_.write8(u, ram_.read8(v));
             else ram_.write8(v, ram_.read8(u));
         }
+    } else if (files && (n == "TALK" || n == "LISTEN") && (r.a & 0x1F) >= 8 && (r.a & 0x1F) < 12) {
+        // serial bus, as far as a program needs it next to LOAD: a disk drive is there when files are attached. It
+        // accepts commands without acting on them and answers with its status message on the command channel (15).
+        if (n == "TALK") talkDevice_ = static_cast<Byte>(r.a & 0x1F);
+        ram_.write8(0x90, 0);
+    } else if (files && (n == "UNLSN" || n == "SECOND" || n == "CIOUT")) {
+        ram_.write8(0x90, 0);
+    } else if (files && n == "TKSA") {
+        talkSecondary_ = static_cast<Byte>(r.a & 0x0F);
+        ram_.write8(0x90, 0);
+    } else if (files && n == "UNTLK") {
+        talkDevice_ = 0;
+        ram_.write8(0x90, 0);
+    } else if (files && n == "ACPTR" && talkDevice_ >= 8 && talkSecondary_ == 15) {
+        if (driveStatusPos_ >= driveStatus_.size()) {  // read to the end: the next message is "OK"
+            driveStatus_ = kDriveOk;
+            driveStatusPos_ = 0;
+        }
+        r.a = static_cast<Byte>(driveStatus_[driveStatusPos_++]);
+        const bool last = driveStatusPos_ >= driveStatus_.size();
+        ram_.write8(0x90, static_cast<Byte>(last ? 0x40 : 0x00));  // end of information with the last byte
+        r.p = static_cast<Byte>((r.p & ~(kFlagZ | kFlagN)) | (r.a == 0 ? kFlagZ : 0) | (r.a & 0x80 ? kFlagN : 0));
+        setC(false);
+        note = "drive status";
     } else {
         // serial bus: no devices
         ram_.write8(0x90, static_cast<Byte>(ram_.read8(0x90) | 0x80));

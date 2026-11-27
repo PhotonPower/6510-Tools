@@ -136,6 +136,12 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   Entscheidungsvorschlägen und offenen Fragen).
 
 ### Behoben
+- KERNAL-Emulation: Mit angehängten Dateien (`attach`) antwortet ein Laufwerk auf dem **Befehlskanal** des seriellen Busses
+  (`TALK` / `TKSA $6F` / `ACPTR` / `UNTLK`) mit der Statusmeldung des 1541 (`00, OK,00,00`, nach einem fehlgeschlagenen
+  `LOAD` `62,FILE NOT FOUND,00,00`); `LISTEN`, `SECOND`, `CIOUT`, `UNLSN` werden angenommen. Vorher meldete jede dieser
+  Routinen „kein Gerät“, und ein Programm, das nach dem Nachladen den Fehlerkanal liest, blieb hängen. `LOAD` liefert für
+  eine Datei, die bei `$FFFF` endet, das Ende `$0000` wie der KERNAL (vorher `$FFFF`). Gefunden an einem echten Spiel
+  (Realm of Impossibility lädt seine Verliese nach).
 - KERNAL-Emulation: der IRQ-Ausgang **`$EA7E`** (`LDA $DC0D`, dann wie `$EA81`) ist jetzt echter Code – vorher kehrte ein
   Raster-Handler, der mit `JMP $EA7E` endet, wie ein Unterprogramm zurück und das Programm lief ins Leere. Die
   Initialisierungen hinter der Sprungtabelle werden nachgebildet, wenn ein Programm sie direkt aufruft: `$FDA3` (`IOINIT`),
