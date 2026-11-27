@@ -295,7 +295,7 @@ std::string Monitor::Impl::help() {
            "  io                     writes to chip registers                  kernal   KERNAL calls\n"
            "  console                text printed through CHROUT               screen   text screen (40x25)\n"
            "  keys \"text\"            keys for GETIN/CHRIN                      run [adr]   start like RUN / SYS\n"
-           "  shot file.png [col row w h] [zoom] [border] [pepto]   screen as PNG (box in text cells)\n"
+           "  shot file.png [col row w h] [zoom] [border] [nosprites] [pepto]   screen as PNG (box in text cells)\n"
            "  ?  help      q  quit\n";
 }
 
@@ -629,19 +629,20 @@ std::string Monitor::Impl::cmdMachine(const std::vector<std::string>& a) {
 std::string Monitor::Impl::cmdC64(const std::string& cmd, const std::vector<std::string>& a) {
     C64& c64 = requireC64(cmd);
     if (cmd == "shot") {
-        // shot file [col row width height] [zoom] [border] [pepto]: text cells of the 40 x 25 screen
+        // shot file [col row width height] [zoom] [border] [nosprites] [pepto]: text cells of the 40 x 25 screen
         requireFiles();
-        if (a.size() < 2) throw MonitorError("usage: shot file.png [col row width height] [zoom] [border] [pepto]");
+        if (a.size() < 2) throw MonitorError("usage: shot file.png [col row width height] [zoom] [border] [nosprites] [pepto]");
         RenderOptions ro;
         std::vector<std::int64_t> nums;
         for (std::size_t i = 2; i < a.size(); ++i) {
             const std::string w = lower(a[i]);
             if (w == "border") ro.border = true;
+            else if (w == "nosprites") ro.sprites = false;
             else if (w == "pepto" || w == "colodore") (void)parsePalette(w, ro.palette);
             else nums.push_back(value(a[i]));
         }
         if (nums.size() != 0 && nums.size() != 1 && nums.size() != 4 && nums.size() != 5)
-            throw MonitorError("usage: shot file.png [col row width height] [zoom] [border] [pepto]");
+            throw MonitorError("usage: shot file.png [col row width height] [zoom] [border] [nosprites] [pepto]");
         IndexedImage img = renderScreen(c64, mach().memory(), ro);
         const int ox = ro.border ? 32 : 0, oy = ro.border ? 36 : 0;
         std::int64_t zoom = 1;

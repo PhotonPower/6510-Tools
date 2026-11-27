@@ -62,7 +62,7 @@ Disassembler, Emulator, C64-Maschine, Agenten-Schnittstelle, Monitor, Reverse En
   `PLOT`, `LOAD`/`SAVE`, Jiffy-Uhr über den IRQ, …; alles andere wird protokolliert. Echte ROMs (eigene Kopie, nie im
   Repository) lassen sich laden
 - **Bildschirm als Bild** (alle Text- und Bitmap-Modi, Rahmen, Scrolling, VIC-Bank; selbst gezeichneter Ersatzzeichensatz ohne
-  ROM; Paletten Colodore/Pepto) als PNG für ein Modell, das Bilder versteht; Sprites sind eine Idee
+  ROM; Paletten Colodore/Pepto; Sprites mit Kollisionsregistern) als PNG für ein Modell, das Bilder versteht
 - **Images:** D64 (35/40 Spuren, Fehlerbytes), T64 (mit den üblichen Fehlern), CRT; Cartridges vom Typ 0 (8K, 16K, Ultimax)
   laufen in der Maschine, `LOAD` liest aus einem D64/T64; `m6510tool d64|t64|crt` (geprüft gegen `c1541` aus VICE).
   Dazu PRG, P00 und ein eigenes Snapshot-Format

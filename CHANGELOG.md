@@ -7,6 +7,11 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Sprites:** `renderScreen` zeichnet die acht Sprites (Hires/Multicolor, Vergrößerung, neuntes X-Bit, Priorität
+  untereinander und gegen die Grafik, hinter dem Rahmen verdeckt); `screenshot` mit `sprites:false` bzw. Monitor
+  `shot … nosprites` zeigt nur die Grafik. **Sprite-Kollisionen** `$D01E`/`$D01F` (`spriteCollisions`): einmal je Bild
+  pixelgenau aus dem Maschinenzustand bestimmt, gesammelt bis zum Lesen, mit den Interrupt-Bits in `$D019`.
+  Snapshot-Format Version 3 (speichert die beiden Kollisionsregister; liest 1 und 2 weiter).
 - **Meilenstein 0.6 – Images und Entpacken:**
   - **D64** lesen (35/40 Spuren, mit/ohne Fehlerbytes; BAM, Verzeichnis, Dateiketten mit Prüfung auf Schleifen, Zeiger
     außerhalb und falsche Größen), **T64** lesen (verbreitete Fehler toleriert und gemeldet), **CRT** lesen (Hardwaretypen

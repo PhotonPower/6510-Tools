@@ -100,10 +100,10 @@ Eigenes Format für `save_state`/`load_state` (auch Monitor `savestate`/`loadsta
 
 | Teil | Inhalt |
 |---|---|
-| Kopf | `M6510SN1`, Version (1) |
+| Kopf | `M6510SN1`, Version (3; gelesen werden 1–3) |
 | CPU | `A`, `X`, `Y`, `S`, `P`, `PC` (2), Flags (angehalten, IRQ-Leitung, NMI anstehend, I-Verzögerung, Port aktiv), Port-Richtung, Port-Daten, Befehle (8), Zyklen (8), Interrupts (8), Aufruftiefe (4) |
 | RAM | 65 536 Byte |
-| C64 (optional, Kennbyte) | Farb-RAM (1024), VIC (64), SID (32), CIA 1 (16), CIA 2 (16), Konfiguration, `$D019`-Latch, CIA-1-ICR und -Maske, Timer-Latch (2), Timer-Start (8), nächster Unterlauf (8), letzte Rasterprüfung (8), CIA-2-ICR und -Maske, Zufallszustand (4), IRQ von außen |
+| C64 (optional, Kennbyte) | Farb-RAM (1024), VIC (64), SID (32), CIA 1 (16), CIA 2 (16), Konfiguration, `$D019`-Latch, CIA-1-ICR und -Maske, Timer-Latch (2), Timer-Start (8), nächster Unterlauf (8), letzte Rasterprüfung (8), CIA-2-ICR und -Maske, Zufallszustand (4), IRQ von außen, ab Version 3: Kollisionsregister `$D01E`, `$D01F` |
 | KERNAL-Emulation (optional, Kennbyte) | Zahl der Tasten im Puffer (2), Tasten |
 
 Beschädigte Dateien werden abgelehnt (jede Abkürzung, falsche Kennbytes, Daten am Ende). ROMs werden **nicht** im Snapshot

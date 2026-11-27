@@ -62,7 +62,7 @@ und Sitzung gemeinsam benutzen. Zusätzlich: `run` (Start wie `RUN`/`SYS`), `con
 
 ## Meilenstein 0.5 – Reverse Engineering (erledigt)
 
-Umgesetzt wie unten beschrieben, mit diesen Abweichungen: Sprites werden im Bild noch nicht gezeigt (Idee); `bitmap`/`colors`
+Umgesetzt wie unten beschrieben, mit diesen Abweichungen: Sprites kamen erst nach 0.6 ins Bild (samt Kollisionsregistern); `bitmap`/`colors`
 als Datenarten sind eine Idee. Zusätzlich: Interrupt-Handler, die das Programm über `$0314`/`$0318`/`$FFFE`/… einträgt,
 werden Einstiegspunkte und laufen in `run_routine` mit Interrupt-Rahmen (`call` mit `frame`); Zeiger in Immediate-Paaren
 (`LDA #<text / LDY #>text`) erscheinen im Listing als `#<name`/`#>name`. Die Erprobung mit einem echten Modell steht noch aus
@@ -94,7 +94,7 @@ liefert `LOAD` die Dateien eines D64/T64, und `disk.d64:NAME` gilt überall, wo 
 
 - Erprobung des Orchestrators mit einem echten Modell und Feinschliff von Prompt und Parametern (wie bei den
   Schwesterprojekten offen)
-- Sprites, Rasterzeilen-Effekte (Registerstand pro Zeile aus dem Schreibprotokoll) im Bildschirmbild
+- Rasterzeilen-Effekte (Registerstand pro Zeile aus dem Schreibprotokoll) im Bildschirmbild; Sprites zeilengenau (Multiplexer)
 - D64 **schreiben** (Assembler-Ausgabe direkt auf eine Diskette), weitere CRT-Typen (Ocean, Magic Desk, EasyFlash …)
 - SID-Musik erkennen (Player-Routinen, `.sid`-Dateien lesen)
 - Makros, `INCLUDE`, bedingte Assemblierung, anonyme Labels (`+`/`-`)

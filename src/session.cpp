@@ -869,6 +869,7 @@ struct Session::Impl {
         needC64(cmd.c_str());
         RenderOptions ro;
         ro.border = flag("border", false);
+        ro.sprites = flag("sprites", true);
         if (has("palette") && !parsePalette(text("palette"), ro.palette)) throw SessionError("palette must be colodore or pepto");
         const IndexedImage current = renderScreen(*s.m_.c64(), s.m_.memory(), ro);
         if (cmd == "screen_diff") {
