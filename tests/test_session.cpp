@@ -205,6 +205,22 @@ int main() {
         CHECK(ok(call(s, R"({"cmd":"interrupt","kind":"irq","release":true})")));
         r = call(s, R"({"cmd":"read","addr":"0xC200","len":1})");
         CHECK(str(r, "hex") != std::string("00"));
+        // $EA7E (acknowledge CIA 1, restore the registers, RTI) is real code too: the handler returns to the loop
+        call(s, R"({"cmd":"asm","source":"irq7: INC $C201\n JMP $EA7E\nmain7: SEI\n LDA #<irq7\n STA $0314\n LDA #>irq7\n STA $0315\n LDA #$7F\n STA $DC0D\n CLI\nloop7: JMP loop7","origin":"0xC000"})");
+        call(s, R"({"cmd":"set","regs":{"PC":"main7"}})");
+        call(s, R"({"cmd":"run","max_instructions":20})");
+        CHECK(ok(call(s, R"({"cmd":"interrupt","kind":"irq"})")));
+        call(s, R"({"cmd":"run","max_instructions":20})");
+        CHECK(ok(call(s, R"({"cmd":"interrupt","kind":"irq","release":true})")));
+        r = call(s, R"({"cmd":"run","max_instructions":20})");
+        CHECK_EQ(str(r, "pc").substr(0, 4), std::string("0xC0"));
+        CHECK(str(call(s, R"({"cmd":"read","addr":"0xC201","len":1})"), "hex") != std::string("00"));
+        // IOINIT called behind the jump table ($FDA3) switches the timer interrupt of CIA 1 back on
+        call(s, R"({"cmd":"asm","source":"tick: INC $C202\n JMP $EA7E\nmain8: SEI\n LDA #<tick\n STA $0314\n LDA #>tick\n STA $0315\n LDA #$7F\n STA $DC0D\n JSR $FDA3\n CLI\nloop8: JMP loop8","origin":"0xC000"})");
+        call(s, R"({"cmd":"write","addr":"0xC202","hex":"00"})");
+        call(s, R"({"cmd":"set","regs":{"PC":"main8"}})");
+        call(s, R"({"cmd":"run","max_instructions":100000})");
+        CHECK(str(call(s, R"({"cmd":"read","addr":"0xC202","len":1})"), "hex") != std::string("00"));
     }
 
     // ---- files: only with --allow-files -------------------------------------------------------------

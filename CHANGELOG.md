@@ -129,6 +129,11 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
   Entscheidungsvorschlägen und offenen Fragen).
 
 ### Behoben
+- KERNAL-Emulation: der IRQ-Ausgang **`$EA7E`** (`LDA $DC0D`, dann wie `$EA81`) ist jetzt echter Code – vorher kehrte ein
+  Raster-Handler, der mit `JMP $EA7E` endet, wie ein Unterprogramm zurück und das Programm lief ins Leere. Die
+  Initialisierungen hinter der Sprungtabelle werden nachgebildet, wenn ein Programm sie direkt aufruft: `$FDA3` (`IOINIT`),
+  `$FD15` (`RESTOR`), `$FD50` (`RAMTAS`), `$FF5B`/`$E518` (`CINT`) – ohne `IOINIT` blieb der Timer-Interrupt der CIA 1 aus,
+  wenn ein Vorspann ihn abgeschaltet hatte. Gefunden an einem echten Spiel (Sorcery, Crack mit Intro und Trainer-Menü).
 - **Befunde aus dem Blindtest** (ein Claude-Agent übernahm mit `m6510_drive.py` die Rolle des Modells, nur mit dem PRG;
   Ergebnis: alle 10 Routinen dokumentiert, Listing verifiziert, rund 115 Werkzeugaufrufe):
   - Listing-Ausschnitte benennen Adressen im analysierten Programm jetzt genauso wie das ganze Listing (vorher `#$B3` statt
