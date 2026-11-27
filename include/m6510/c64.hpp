@@ -121,6 +121,7 @@ public:
         bool nmiLine = false;     ///< CIA 2 interrupt output (the NMI input is edge-triggered)
         std::uint32_t random = 0x12345678;
         bool externalIrq = false;  ///< IRQ requested from outside (session, monitor)
+        Byte spriteSprite = 0, spriteBackground = 0;  ///< $D01E / $D01F: collected once per frame, cleared by reading
     };
     [[nodiscard]] State state() const;
     void setState(const State& s);

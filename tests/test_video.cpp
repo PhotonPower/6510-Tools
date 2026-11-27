@@ -245,5 +245,137 @@ int main() {
         CHECK_EQ(base64Encode({'M', 'a', 'n'}), std::string("TWFu"));
     }
 
+    // ---- sprites: picture, priority, expansion, multicolour ---------------------------------------------
+    {
+        Machine64 m;
+        for (unsigned i = 0; i < 1000; ++i) m.ram.write8(static_cast<Address>(0x0400 + i), 0x20);
+        // sprite data block 13 at $0340: a solid 24 x 21 block; block 14 at $0380: multicolour pairs 01 10 11 00 in every byte
+        for (unsigned i = 0; i < 63; ++i) {
+            m.ram.write8(static_cast<Address>(0x0340 + i), 0xFF);
+            m.ram.write8(static_cast<Address>(0x0380 + i), 0x6C);
+        }
+        m.ram.write8(0x07F8, 13);
+        m.ram.write8(0x07F9, 14);
+        m.c64.write(0xD000, 24);  // sprite 0 at the top left corner of the window
+        m.c64.write(0xD001, 50);
+        m.c64.write(0xD027, 1);
+        m.c64.write(0xD015, 0x01);
+        IndexedImage img = m.render();
+        CHECK_EQ(px(img, 0, 0), 1);
+        CHECK_EQ(px(img, 23, 20), 1);
+        CHECK_EQ(px(img, 24, 0), 6);
+        CHECK_EQ(px(img, 0, 21), 6);
+        RenderOptions graphicsOnly;
+        graphicsOnly.sprites = false;
+        CHECK_EQ(px(renderScreen(m.c64, m.ram, graphicsOnly), 0, 0), 6);
+        // with the border the picture moves by 32 / 36 pixels; a sprite in the border area is hidden
+        m.c64.write(0xD000, 12);
+        img = m.render(true);
+        CHECK_EQ(px(img, 31, 36), 14);
+        CHECK_EQ(px(img, 32, 36), 1);
+        CHECK_EQ(px(img, 32 + 11, 36), 1);
+        CHECK_EQ(px(img, 32 + 12, 36), 6);
+        m.c64.write(0xD000, 24);
+        // expansion doubles the size
+        m.c64.write(0xD01D, 0x01);
+        m.c64.write(0xD017, 0x01);
+        img = m.render();
+        CHECK_EQ(px(img, 47, 41), 1);
+        CHECK_EQ(px(img, 48, 41), 6);
+        CHECK_EQ(px(img, 47, 42), 6);
+        m.c64.write(0xD01D, 0);
+        m.c64.write(0xD017, 0);
+        // the ninth bit of X
+        m.c64.write(0xD010, 0x01);
+        m.c64.write(0xD000, 0x10);  // X = 272 -> window column 248
+        img = m.render();
+        CHECK_EQ(px(img, 247, 0), 6);
+        CHECK_EQ(px(img, 248, 0), 1);
+        m.c64.write(0xD010, 0);
+        m.c64.write(0xD000, 24);
+        // priority against the graphics: a character in front of sprite 0 when $D01B says so
+        m.ram.write8(0x0400, 0xA0);  // reversed space: all pixels foreground
+        m.c64.setColorRam(0, 5);
+        CHECK_EQ(px(m.render(), 0, 0), 1);
+        m.c64.write(0xD01B, 0x01);
+        img = m.render();
+        CHECK_EQ(px(img, 0, 0), 5);
+        CHECK_EQ(px(img, 8, 0), 1);
+        m.c64.write(0xD01B, 0);
+        // multicolour sprite 1 under sprite 0: sprite 0 wins where both have pixels
+        m.c64.write(0xD002, 24 + 16);
+        m.c64.write(0xD003, 50);
+        m.c64.write(0xD028, 2);
+        m.c64.write(0xD025, 7);
+        m.c64.write(0xD026, 8);
+        m.c64.write(0xD01C, 0x02);
+        m.c64.write(0xD015, 0x03);
+        img = m.render();
+        CHECK_EQ(row(img, 16, 0), std::string("11111111"));
+        CHECK_EQ(row(img, 24, 0), std::string("77228866"));  // 01 = $D025, 10 = sprite colour, 11 = $D026, 00 = transparent
+        // collisions of this state: the two sprites overlap, both touch the character at the top left? only sprite 0
+        const SpriteCollisions hit = spriteCollisions(m.c64, m.ram);
+        CHECK_EQ(int{hit.spriteSprite}, 0x03);
+        CHECK_EQ(int{hit.spriteBackground}, 0x01);
+        // apart: no collision between them
+        m.c64.write(0xD002, 24 + 100);
+        CHECK_EQ(int{spriteCollisions(m.c64, m.ram).spriteSprite}, 0);
+        // transparent pixels do not collide: sprite 1 shifted so that only its 00 pairs meet sprite 0's last column
+        m.c64.write(0xD002, 24 + 17);
+        CHECK_EQ(int{spriteCollisions(m.c64, m.ram).spriteSprite}, 0x03);
+        m.c64.write(0xD002, 24 + 24);
+        CHECK_EQ(int{spriteCollisions(m.c64, m.ram).spriteSprite}, 0);
+        // multicolour text: the pair 01 is background for the sprites
+        m.c64.write(0xD015, 0x01);
+        m.c64.write(0xD016, 0x18);
+        m.c64.setColorRam(0, 0x0D);
+        for (unsigned i = 0; i < 8; ++i) m.ram.write8(static_cast<Address>(0x3000 + 8 + i), 0x55);  // character 1: only 01 pairs
+        m.c64.write(0xD018, 0x1C);  // character set at $3000
+        m.ram.write8(0x0400, 1);
+        CHECK_EQ(int{spriteCollisions(m.c64, m.ram).spriteBackground}, 0);
+        for (unsigned i = 0; i < 8; ++i) m.ram.write8(static_cast<Address>(0x3000 + 8 + i), 0xAA);  // only 10 pairs
+        CHECK_EQ(int{spriteCollisions(m.c64, m.ram).spriteBackground}, 0x01);
+        // switched off: nothing
+        m.c64.write(0xD015, 0);
+        CHECK_EQ(int{spriteCollisions(m.c64, m.ram).spriteBackground}, 0);
+    }
+
+    // ---- $D01E / $D01F: latched once per frame, cleared by reading, interrupt on the first collision ------
+    {
+        Machine64 m;
+        for (unsigned i = 0; i < 1000; ++i) m.ram.write8(static_cast<Address>(0x0400 + i), 0x20);
+        for (unsigned i = 0; i < 63; ++i) m.ram.write8(static_cast<Address>(0x0340 + i), 0xFF);
+        m.ram.write8(0x07F8, 13);
+        m.ram.write8(0x07F9, 13);
+        m.c64.write(0xD000, 100);
+        m.c64.write(0xD001, 100);
+        m.c64.write(0xD002, 110);
+        m.c64.write(0xD003, 110);
+        m.c64.write(0xD015, 0x03);
+        // an endless loop at $C000; two frames later the latch holds both sprites
+        m.ram.write8(0xC000, 0x4C);
+        m.ram.write8(0xC001, 0x00);
+        m.ram.write8(0xC002, 0xC0);
+        m.cpu.registers().pc = 0xC000;
+        m.cpu.registers().p |= kFlagI;
+        (void)m.cpu.run(2 * 312 * 63 / 3 + 10);
+        CHECK_EQ(int{m.c64.peek(0xD01E)}, 0x03);
+        CHECK_EQ(int{m.c64.peek(0xD01E)}, 0x03);          // peek has no side effects
+        CHECK_EQ(int{m.c64.peek(0xD01F)}, 0x00);
+        CHECK((m.c64.peek(0xD019) & 0x04) != 0);          // sprite-sprite interrupt latch
+        // the processor reads it (LDA $D01E / STA $C100) ...
+        const Byte prog[] = {0xAD, 0x1E, 0xD0, 0x8D, 0x00, 0xC1, 0x4C, 0x00, 0xC0};
+        for (unsigned i = 0; i < sizeof prog; ++i) m.ram.write8(static_cast<Address>(0xC010 + i), prog[i]);
+        m.cpu.registers().pc = 0xC010;
+        (void)m.cpu.run(3);
+        CHECK_EQ(int{m.ram.read8(0xC100)}, 0x03);
+        CHECK_EQ(int{m.c64.peek(0xD01E)}, 0x00);          // ... and that clears it
+        (void)m.cpu.run(312 * 63 / 3 + 10);
+        CHECK_EQ(int{m.c64.peek(0xD01E)}, 0x03);          // still overlapping: set again in the next frame
+        // the state survives a round trip
+        C64::State st = m.c64.state();
+        CHECK_EQ(int{st.spriteSprite}, 0x03);
+    }
+
     return finish("video");
 }

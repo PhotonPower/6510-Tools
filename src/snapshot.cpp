@@ -72,7 +72,7 @@ private:
 std::vector<Byte> serialize(const Snapshot& s) {
     Writer w;
     for (char c : kMagic) w.u8(static_cast<Byte>(c));
-    w.u8(2);  // version (2: four CIA timers)
+    w.u8(3);  // version (2: four CIA timers, 3: sprite collision latches)
     const CpuState& c = s.cpu;
     w.u8(c.regs.a);
     w.u8(c.regs.x);
@@ -112,6 +112,8 @@ std::vector<Byte> serialize(const Snapshot& s) {
         w.u8(m.nmiLine ? 1 : 0);
         w.u32(m.random);
         w.u8(m.externalIrq ? 1 : 0);
+        w.u8(m.spriteSprite);
+        w.u8(m.spriteBackground);
     }
     w.u8(s.kernal ? 1 : 0);
     if (s.kernal) {
@@ -126,7 +128,7 @@ Snapshot deserializeSnapshot(const std::vector<Byte>& bytes) {
     for (char c : kMagic)
         if (r.u8() != static_cast<Byte>(c)) throw IoError("not a 6510 snapshot (missing M6510SN1)");
     const unsigned version = r.u8();
-    if (version != 1 && version != 2) throw IoError("unsupported snapshot version");
+    if (version < 1 || version > 3) throw IoError("unsupported snapshot version");
     Snapshot s;
     CpuState& c = s.cpu;
     c.regs.a = static_cast<Byte>(r.u8());
@@ -183,7 +185,7 @@ Snapshot deserializeSnapshot(const std::vector<Byte>& bytes) {
         m.lastRasterCheck = r.u64();
         m.cia2Icr = static_cast<Byte>(r.u8());
         m.cia2Mask = static_cast<Byte>(r.u8());
-        if (version == 2) {
+        if (version >= 2) {
             const unsigned nmi = r.u8();
             if (nmi > 1) throw IoError("bad NMI flag in snapshot");
             m.nmiLine = nmi == 1;
@@ -192,6 +194,10 @@ Snapshot deserializeSnapshot(const std::vector<Byte>& bytes) {
         const unsigned ext = r.u8();
         if (ext > 1) throw IoError("bad IRQ flag in snapshot");
         m.externalIrq = ext == 1;
+        if (version >= 3) {
+            m.spriteSprite = static_cast<Byte>(r.u8());
+            m.spriteBackground = static_cast<Byte>(r.u8());
+        }
         s.c64 = m;
     }
     const unsigned hasKernal = r.u8();

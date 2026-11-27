@@ -22,14 +22,24 @@ bool parsePalette(const std::string& name, Palette& out);
 struct RenderOptions {
     bool border = false;               ///< add the border (32 px left/right, 36 px top/bottom: 384 x 272)
     Palette palette = Palette::Colodore;
+    bool sprites = true;               ///< draw the sprites (false: the graphics alone)
 };
 
 /// The C64 screen rendered from the machine state (docs/c64.md, "Video"): the VIC-II registers and memory
 /// as they are at the moment, not line by line. Text (standard, multicolour, extended background) and
 /// bitmap modes (hires, multicolour), display enable, 38 columns / 24 rows, fine scrolling and the
-/// VIC bank. Without a character ROM a self-drawn replacement character set is used. No sprites.
+/// VIC bank, and the eight sprites (hires / multicolour, expansion, priority against the graphics and
+/// each other). Without a character ROM a self-drawn replacement character set is used.
 /// The result is 320 x 200 pixels (384 x 272 with border), palette indices 0..15.
 IndexedImage renderScreen(const C64& c64, const Memory& ram, const RenderOptions& options = {});
+
+/// Which sprites touch each other / the foreground of the graphics in the current machine state
+/// (the bits of $D01E and $D01F for one frame).
+struct SpriteCollisions {
+    Byte spriteSprite = 0;
+    Byte spriteBackground = 0;
+};
+[[nodiscard]] SpriteCollisions spriteCollisions(const C64& c64, const Memory& ram);
 
 /// Cuts out the pixel box [x0,x1] x [y0,y1] (clamped to the image) and enlarges it by an integer
 /// factor (nearest neighbour).

@@ -1,4 +1,5 @@
 #include "m6510/c64.hpp"
+#include "m6510/video.hpp"
 
 #include <cctype>
 #include <stdexcept>
@@ -280,8 +281,14 @@ bool C64::readIo(Address a, Byte& v, bool effects) {
             case 0x18: v = static_cast<Byte>(vic_[0x18] | 0x01); break;
             case 0x19: v = static_cast<Byte>(s_.vicIrq | 0x70 | ((s_.vicIrq & vic_[0x1A] & 0x0F) ? 0x80 : 0)); break;
             case 0x1A: v = static_cast<Byte>(vic_[0x1A] | 0xF0); break;
-            case 0x1E:
-            case 0x1F: v = 0; break;  // no sprite collisions
+            case 0x1E:  // sprite collisions: latched once per frame (tick), reading clears them
+                v = s_.spriteSprite;
+                if (effects) s_.spriteSprite = 0;
+                break;
+            case 0x1F:
+                v = s_.spriteBackground;
+                if (effects) s_.spriteBackground = 0;
+                break;
             default:
                 if (r >= 0x2F) v = 0xFF;
                 else if (r >= 0x20) v = static_cast<Byte>(vic_[r] | 0xF0);
@@ -448,6 +455,15 @@ void C64::tick() {
         const unsigned from = static_cast<unsigned>((prev + 1) % kRasterLines);
         const unsigned dist = (cmp + kRasterLines - from) % kRasterLines;
         if (cmp < kRasterLines && (passed >= kRasterLines || dist < passed)) s_.vicIrq = static_cast<Byte>(s_.vicIrq | 0x01);
+        // a new frame: which sprites touch each other or the graphics (state of this moment, not line by line);
+        // only the first collision since the register was read raises the interrupt
+        if (line / kRasterLines != prev / kRasterLines && vic_[0x15] != 0) {
+            const SpriteCollisions hit = spriteCollisions(*this, ram_);
+            if (hit.spriteSprite && !s_.spriteSprite) s_.vicIrq = static_cast<Byte>(s_.vicIrq | 0x04);
+            if (hit.spriteBackground && !s_.spriteBackground) s_.vicIrq = static_cast<Byte>(s_.vicIrq | 0x02);
+            s_.spriteSprite = static_cast<Byte>(s_.spriteSprite | hit.spriteSprite);
+            s_.spriteBackground = static_cast<Byte>(s_.spriteBackground | hit.spriteBackground);
+        }
         s_.lastRasterCheck = line;
     }
     // CIA timers counting cycles (continuous or one-shot)

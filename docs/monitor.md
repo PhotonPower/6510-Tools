@@ -96,7 +96,7 @@ C64-Befehle (nur mit `machine c64`):
 | `screen` | Bildschirminhalt als Text (40×25, Bildschirmcodes → Zeichen) |
 | `keys "text"` | Tastenpuffer für `GETIN`/`CHRIN` füllen (`\n` = RETURN; Kleinbuchstaben ergeben die normalen Buchstabencodes) |
 | `run [adr]` | Programm wie mit `RUN` (BASIC-Starter → `SYS`-Adresse) bzw. wie `SYS adr` starten und laufen lassen |
-| `shot datei.png [spalte zeile breite höhe] [zoom] [border] [pepto]` | Bildschirm als PNG ([c64.md](c64.md#video-der-bildschirm-als-bild)): ganz (Zoom 1–4) oder ein Ausschnitt in Textzellen (hex: `28` = 40 Spalten; Standard-Zoom so, dass der Ausschnitt etwa 320 Pixel breit wird); `border` mit Rahmen, `pepto` andere Palette |
+| `shot datei.png [spalte zeile breite höhe] [zoom] [border] [nosprites] [pepto]` | Bildschirm als PNG ([c64.md](c64.md#video-der-bildschirm-als-bild)): ganz (Zoom 1–4) oder ein Ausschnitt in Textzellen (hex: `28` = 40 Spalten; Standard-Zoom so, dass der Ausschnitt etwa 320 Pixel breit wird); `border` mit Rahmen, `nosprites` ohne Sprites, `pepto` andere Palette |
 
 Fehler erscheinen als `? Meldung` und ändern den Zustand nicht. Nach jedem Lauf (`n`, `o`, `u`, `g`, `ru`, `run`) zeigt der
 Monitor den Grund (`stopped: breakpoint at C004  [2 instructions, 4 cycles]`), die Anzahl angenommener Interrupts, die

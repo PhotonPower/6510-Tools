@@ -349,6 +349,28 @@ int main() {
         CHECK_EQ(num(r, "changed_pixels"), 64);
         CHECK_EQ(num(*r.find("text_cells"), "col1"), 0);
         CHECK_EQ(num(*r.find("bbox"), "x1"), 7);
+        // a sprite changes the picture (a solid block at the top left of the second text row); "sprites":false leaves it out
+        call(s, R"({"cmd":"screenshot","name":"nosprite"})");
+        {
+            std::string block;
+            for (int i = 0; i < 63; ++i) block += "FF";
+            call(s, R"({"cmd":"write","addr":"0x0340","hex":")" + block + R"("})");
+        }
+        call(s, R"({"cmd":"write","addr":"0x07F8","hex":"0D"})");
+        call(s, R"({"cmd":"write","addr":"0xD000","hex":"18 3A"})");  // X = 24, Y = 58
+        call(s, R"({"cmd":"write","addr":"0xD027","hex":"07"})");
+        call(s, R"({"cmd":"write","addr":"0xD015","hex":"01"})");
+        call(s, R"({"cmd":"screenshot","name":"sprite"})");
+        r = call(s, R"({"cmd":"screen_diff","a":"nosprite","b":"sprite"})");
+        CHECK(num(r, "changed_pixels") > 400);
+        CHECK_EQ(num(*r.find("bbox"), "x1"), 23);
+        CHECK_EQ(num(*r.find("bbox"), "y0"), 8);
+        call(s, R"({"cmd":"screenshot","name":"hidden","sprites":false})");
+        CHECK_EQ(num(call(s, R"({"cmd":"screen_diff","a":"nosprite","b":"hidden"})"), "changed_pixels"), 0);
+        call(s, R"({"cmd":"write","addr":"0xD015","hex":"00"})");
+        call(s, R"({"cmd":"screen_drop","name":"nosprite"})");
+        call(s, R"({"cmd":"screen_drop","name":"sprite"})");
+        call(s, R"({"cmd":"screen_drop","name":"hidden"})");
         r = call(s, R"({"cmd":"screen_diff","a":"a","b":"before"})");
         CHECK(!r.find("same_size")->asBool());  // 320 x 200 against 384 x 272
         CHECK(!ok(call(s, R"({"cmd":"screen_diff","a":"nosuch"})")));

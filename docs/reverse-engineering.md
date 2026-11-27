@@ -123,7 +123,7 @@ die Form, die die Originalbytes ergibt (`LDA.W`, `USBC`, `.BYTE`), und der Vergl
 | `sprites` | 64-Byte-Block, auf den ein Sprite-Zeiger (`LDA #n / STA $07F8–$07FF`) zeigt; Listing mit Bitmuster-Kommentar |
 | `charset` | Bereich, auf den `LDA #n / STA $D018` zeigt (außer dem Zeichensatz-ROM bei `$1000/$1800`); Listing 8 Byte je Zeichen |
 | `basic` | BASIC-Programm bei `$0801`; ein reiner Starter wird `.BASIC zeile,ziel` |
-| `zeros` | Nullbereiche ab 8 Byte (das Listing schreibt ab 16 Byte `.FILL`) |
+| `zeros` | Nullbereiche ab 8 Byte (das Listing schreibt ab 16 gleichen Bytes `.FILL n` bzw. `.FILL n,$wert`) |
 | `bitmap`, `colors` | 8000 Byte Bitmap / 1000 Byte Farben im Bitmap-Modus – Idee |
 
 ## Ohne Modell: von Hand oder durch einen Agenten

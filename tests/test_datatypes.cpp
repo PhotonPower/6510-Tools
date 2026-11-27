@@ -84,6 +84,7 @@ short:  .BYTE "OK", 0
 scr:    .SCREEN "screen text"
 nums:   .BYTE $FF, $FE
 zeros:  .FILL 20
+        .FILL 24,$FF
 tab:    .WORD $1234, $5678, $9ABC
 noise:  .BYTE $FF, $80, $FF, $81, $FF, $82
 )");
@@ -127,6 +128,7 @@ noise:  .BYTE $FF, $80, $FF, $81, $FF, $82
         CHECK(has(r.text, ".SCREEN \"screen text\""));
         CHECK(has(r.text, ".WORD $1234,$5678,$9ABC"));
         CHECK(has(r.text, ".FILL 20"));
+        CHECK(has(r.text, ".FILL 24,$FF"));  // a run of any repeated byte
         delete an;
     }
 
