@@ -51,7 +51,8 @@ const std::vector<Code>& realCode() {
         {0xFF48, {0x48, 0x8A, 0x48, 0x98, 0x48, 0xBA, 0xBD, 0x04, 0x01, 0x29, 0x10, 0xF0, 0x03, 0x6C, 0x16, 0x03, 0x6C, 0x14, 0x03}},
         // default IRQ handler: update the clock, acknowledge CIA 1, restore registers
         {0xEA31, {0x20, 0xEA, 0xFF, 0xAD, 0x0D, 0xDC, 0x4C, 0x81, 0xEA}},
-        {0xEA81, {0x68, 0xA8, 0x68, 0xAA, 0x68, 0x40}},
+        // $EA7E (acknowledge CIA 1, then $EA81) is the usual exit of a raster handler that skips the clock
+        {0xEA7E, {0xAD, 0x0D, 0xDC, 0x68, 0xA8, 0x68, 0xAA, 0x68, 0x40}},
         // NMI entry and default handler (acknowledge CIA 2)
         {0xFE43, {0x78, 0x6C, 0x18, 0x03}},
         {0xFE47, {0x48, 0x8A, 0x48, 0x98, 0x48, 0xAD, 0x0D, 0xDD, 0x4C, 0xBC, 0xFE}},
@@ -114,6 +115,11 @@ std::string Kernal::entryName(Address a) {
     if (a == 0xFE66) return "BRK/warm start";
     if (a == 0xE544) return "CLRSCR";   // clear the screen (called directly by many programs)
     if (a == 0xE566) return "HOME";     // cursor home
+    // the routines behind the jump table, called directly by crack intros and loaders
+    if (a == 0xFDA3) return "IOINIT";
+    if (a == 0xFD15) return "RESTOR";
+    if (a == 0xFD50) return "RAMTAS";
+    if (a == 0xFF5B || a == 0xE518) return "CINT";
     if (a == 0xFCE2) return "RESET";
     if (a == kExitTrap) return "return to BASIC";
     return "";
@@ -128,6 +134,7 @@ std::string Kernal::describeAddress(Address a) {
         case 0x0318: return "NMINV: NMI vector (RAM)";
         case 0x0319: return "NMINV+1: high byte of the NMI vector";
         case 0xEA31: return "the KERNAL's IRQ handler (clock, cursor, keyboard); it ends at $EA81";
+        case 0xEA7E: return "the end of the KERNAL's IRQ handler with the CIA 1 acknowledge (LDA $DC0D), then as $EA81";
         case 0xEA81: return "the end of the KERNAL's IRQ handler: restores Y, X, A from the stack and returns with RTI";
         case 0xFE47: return "the KERNAL's NMI handler";
         case 0xFF48: return "the KERNAL's IRQ/BRK entry: pushes A, X, Y and jumps through CINV ($0314) or CBINV ($0316)";

@@ -6,6 +6,13 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Behoben
+- KERNAL-Emulation: der IRQ-Ausgang **`$EA7E`** (`LDA $DC0D`, dann wie `$EA81`) ist jetzt echter Code – vorher kehrte ein
+  Raster-Handler, der mit `JMP $EA7E` endet, wie ein Unterprogramm zurück und das Programm lief ins Leere. Die
+  Initialisierungen hinter der Sprungtabelle werden nachgebildet, wenn ein Programm sie direkt aufruft: `$FDA3` (`IOINIT`),
+  `$FD15` (`RESTOR`), `$FD50` (`RAMTAS`), `$FF5B`/`$E518` (`CINT`) – ohne `IOINIT` blieb der Timer-Interrupt der CIA 1 aus,
+  wenn ein Vorspann ihn abgeschaltet hatte. Gefunden an einem echten Spiel (Sorcery, Crack mit Intro und Trainer-Menü).
+
 ### Hinzugefügt
 - **Meilenstein 0.6 – Images und Entpacken:**
   - **D64** lesen (35/40 Spuren, mit/ohne Fehlerbytes; BAM, Verzeichnis, Dateiketten mit Prüfung auf Schleifen, Zeiger
