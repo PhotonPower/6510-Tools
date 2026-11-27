@@ -7,6 +7,8 @@ die Versionierung an [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- Listing: Folgen von 16 und mehr gleichen Bytes werden auch bei anderen Werten als 0 zu `.FILL n,$wert`
+  (Füllbereiche mit `$FF` belegten sonst hunderte `.BYTE`-Zeilen).
 - **Sprites:** `renderScreen` zeichnet die acht Sprites (Hires/Multicolor, Vergrößerung, neuntes X-Bit, Priorität
   untereinander und gegen die Grafik, hinter dem Rahmen verdeckt); `screenshot` mit `sprites:false` bzw. Monitor
   `shot … nosprites` zeigt nur die Grafik. **Sprite-Kollisionen** `$D01E`/`$D01F` (`spriteCollisions`): einmal je Bild

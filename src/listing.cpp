@@ -330,24 +330,24 @@ void Renderer::buildItems() {
             }
         }
         if (it.length == 0) {
-            // plain bytes up to the next boundary: zero runs of 16 and more as .FILL, else up to 8 per line
+            // plain bytes up to the next boundary: runs of 16 and more equal bytes as .FILL, else up to 8 per line
             std::uint32_t end = o_.to;
             if (const auto b = boundaries.upper_bound(at); b != boundaries.end()) end = std::min<std::uint32_t>(end, *b);
-            unsigned zeros = 0;
-            while (a + zeros < end && view_.read8(static_cast<Address>(a + zeros)) == 0) ++zeros;
-            if (zeros >= 16) {
+            auto runAt = [&](std::uint32_t from, unsigned limit) {
+                const Byte v = view_.read8(static_cast<Address>(from));
+                unsigned n = 0;
+                while (from + n < end && n < limit && view_.read8(static_cast<Address>(from + n)) == v) ++n;
+                return n;
+            };
+            const unsigned run = runAt(a, 0x10000);
+            if (run >= 16) {
                 it.kind = Item::Fill;
-                it.length = zeros;
+                it.length = run;
             } else {
                 it.kind = Item::Bytes;
                 unsigned n = 0;
-                while (a + n < end && n < 8) {
-                    // stop before a long zero run so that it becomes a .FILL of its own
-                    unsigned z = 0;
-                    while (n > 0 && a + n + z < end && view_.read8(static_cast<Address>(a + n + z)) == 0 && z < 16) ++z;
-                    if (z >= 16) break;
-                    ++n;
-                }
+                // stop before a long run so that it becomes a .FILL of its own
+                while (a + n < end && n < 8 && !(n > 0 && runAt(a + n, 16) >= 16)) ++n;
                 it.length = std::max(1U, n);
             }
         }
@@ -424,7 +424,7 @@ std::vector<std::string> Renderer::renderItem(const Item& it, unsigned& userComm
     };
     switch (it.kind) {
         case Item::Fill:
-            lines.push_back("        .FILL " + std::to_string(it.length));
+            lines.push_back("        .FILL " + std::to_string(it.length) + (byteAt(0) != 0 ? "," + h2(byteAt(0)) : std::string()));
             break;
         case Item::Bytes:
             emitList(".BYTE", bytesList(0, it.length), 8);
